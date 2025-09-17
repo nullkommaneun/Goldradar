@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-import os, sys, json, csv, io, math, time, datetime as dt
+import os, sys, json, csv, io, math, datetime as dt
 from urllib.request import urlopen, Request
 from urllib.parse import urlencode
 
@@ -44,9 +44,8 @@ def fetch_fred_series(series_id, start_date):
     for o in obs:
         d = o.get("date")
         v = o.get("value")
-        if not d: 
+        if not d:
             continue
-        # Monats- oder Tagesreihen – wir lassen ISO yyyy-mm-dd
         try:
             val = float(v)
         except:
@@ -55,8 +54,6 @@ def fetch_fred_series(series_id, start_date):
     return out
 
 def fetch_stooq_spot():
-    # stooq „last quote“ CSV: includes date,time,open,high,low,close,volume
-    # f=sd2t2ohlcv (symbol,date,time,open,high,low,close,volume)
     url = "https://stooq.com/q/l/?s=xauusd&f=sd2t2ohlcv&h&e=csv"
     try:
         data = http_get(url).decode("utf-8", errors="ignore")
@@ -71,58 +68,89 @@ def fetch_stooq_spot():
             px = float(close)
         except:
             px = None
-        # build UTC timestamp; stooq times are exchange times; we record as-is in UTC for the app
         ts = f"{date}T{(time_ if len(time_)==8 else '00:00:00')}Z"
         return {"timestamp": ts, "XAUUSD": px}
-    except Exception as e:
+    except Exception:
         return {"timestamp": dt.datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ"), "XAUUSD": None}
 
-def daterange(start, end):
-    cur = start
-    while cur <= end:
-        yield cur
-        cur += dt.timedelta(days=1)
+def fetch_stooq_history():
+    """
+    Lädt tägliche Historie XAUUSD (close) von stooq.
+    Rückgabe: dict[YYYY-MM-DD] = float|None
+    """
+    url = "https://stooq.com/q/d/l/?s=xauusd&i=d"
+    try:
+        data = http_get(url).decode("utf-8", errors="ignore")
+        rdr = csv.reader(io.StringIO(data))
+        header = next(rdr, None)  # ["Date","Open","High","Low","Close","Volume"]
+        out = {}
+        for row in rdr:
+            if not row or len(row) < 5:
+                continue
+            d = row[0][:10]
+            try:
+                close = float(row[4])
+            except:
+                close = None
+            out[d] = close
+        return out
+    except Exception:
+        return {}
 
 def main():
     os.makedirs(OUT_DIR, exist_ok=True)
     today = dt.date.today()
-    start = today - dt.timedelta(days=365*20 + 30)  # ~20y + Puffer
+    start = today - dt.timedelta(days=365*20 + 30)
     start_str = start.isoformat()
 
-    # Pull all series
+    # FRED Serien
     frames = {}
     for sid in SERIES:
         print(f"FRED {sid} …", file=sys.stderr)
         frames[sid] = fetch_fred_series(sid, start_str)
 
-    # Build unified history day-grid across all keys present
+    # stooq GOLD Historie (Backfill)
+    stq_gold = fetch_stooq_history()
+    print(f"stooq GOLD datapoints: {len(stq_gold)}", file=sys.stderr)
+
+    # Alle Datums sammeln
     all_dates = set()
     for sid, m in frames.items():
         all_dates.update(m.keys())
+    all_dates.update(stq_gold.keys())
     if not all_dates:
-        raise RuntimeError("Keine FRED-Daten empfangen.")
+        raise RuntimeError("Keine Daten empfangen (FRED/stooq).")
     dates = sorted([d for d in all_dates if d >= start_str])
 
-    # Compose rows
+    # Compose rows + Backfill GOLD
     history = []
+    valid_gold = 0
     for d in dates:
         row = {"timestamp": d}
+        # GOLD von FRED oder stooq
+        fred_gold = frames.get("GOLDAMGBD228NLBM", {}).get(d, None)
+        if fred_gold is None:
+            fred_gold = stq_gold.get(d, None)
+        if isinstance(fred_gold, float) and not math.isnan(fred_gold):
+            valid_gold += 1
+        row["GOLDAMGBD228NLBM"] = (None if fred_gold is None or (isinstance(fred_gold,float) and math.isnan(fred_gold)) else fred_gold)
+        # Rest
         for sid in SERIES:
+            if sid == "GOLDAMGBD228NLBM":
+                continue
             v = frames.get(sid, {}).get(d, None)
-            # Mark missing as None
             row[sid] = (None if v is None or (isinstance(v,float) and math.isnan(v)) else v)
         history.append(row)
 
-    # Write history.json
+    # Schreiben
     with open(HISTORY_PATH, "w", encoding="utf-8") as f:
         json.dump({"history": history}, f, ensure_ascii=False)
 
-    # Spot
     spot = fetch_stooq_spot()
     with open(SPOT_PATH, "w", encoding="utf-8") as f:
         json.dump(spot, f, ensure_ascii=False)
 
-    print(f"Wrote {HISTORY_PATH} ({len(history)} Zeilen) und {SPOT_PATH}", file=sys.stderr)
+    print(f"Wrote {HISTORY_PATH} ({len(history)} Zeilen, GOLD valid={valid_gold}) und {SPOT_PATH}", file=sys.stderr)
 
 if __name__ == "__main__":
     main()
