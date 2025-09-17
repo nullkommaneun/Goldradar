@@ -1,9 +1,17 @@
-// ---------- Helpers
+// ---------- Mini-Logger in die UI ----------
+function uiLog(msg) {
+  const el = document.getElementById('diag');
+  if (!el) return;
+  const now = new Date().toISOString().slice(11,19);
+  el.textContent = (el.textContent ? el.textContent + "\n" : "") + `[${now}] ${msg}`;
+}
+
+// ---------- Helpers ----------
 const nowBust = () => '?t=' + Date.now();
 const pct = v => (isFinite(v) ? (v>=0?'+':'') + (100*v).toFixed(1) + '%' : '—');
 const SERIES = ["GOLDAMGBD228NLBM","DFII10","DTWEXBGS","VIXCLS","DCOILBRENTEU","T10YIE","BAMLH0A0HYM2","NAPM","RECPROUSM156N","T10Y2Y"];
 
-// ---------- Driver assessment
+// ---------- Driver assessment ----------
 function assessDrivers(t){
   const def = (val, betterLow) => {
     if(val==null || !isFinite(val)) return {status:"neutral", msg:"Neutral (keine Daten)"};
@@ -39,7 +47,7 @@ function recommendation(overall, momentum){
   return {status:"yellow", text:"Abwarten"};
 }
 
-// ---------- Forecast
+// ---------- Forecast ----------
 function forecast(series, horizonDays){
   if(!series || series.length<90) return {median:null, lo:null, hi:null};
   const sorted=[...series].sort((a,b)=>new Date(a.date)-new Date(b.date));
@@ -57,16 +65,20 @@ function forecast(series, horizonDays){
   return {median:med, lo, hi};
 }
 
-// ---------- App
+// ---------- App ----------
 (async function(){
   try{
-    // JSON laden (Cache-Bust)
+    uiLog('fetching json…');
     const [hist, spot] = await Promise.all([
       fetch('data/history.json'+nowBust()).then(r=>r.json()).catch(()=>({history:[]})),
       fetch('data/spot.json'+nowBust()).then(r=>r.json()).catch(()=>({XAUUSD:null,timestamp:null}))
     ]);
 
-    // Rows normalisieren
+    // Spot sofort anzeigen (EU-Maß: USD/kg – keine Umrechnung)
+    const spotVal = (spot && spot.XAUUSD!=null) ? Number(spot.XAUUSD) : null;
+    document.getElementById('spotline').textContent = `Spot: ${spotVal!=null ? spotVal.toFixed(2)+' USD/kg' : '—'}`;
+
+    // Normalisiere Rows
     const rows = (hist.history||[]).map(r=>({
       date: r.timestamp,
       GOLD:r.GOLDAMGBD228NLBM??null,
@@ -75,6 +87,7 @@ function forecast(series, horizonDays){
     })).sort((a,b)=> new Date(a.date)-new Date(b.date));
 
     const goldSeries = rows.filter(r=>isFinite(r.GOLD)).map(r=>({date:r.date, price:r.GOLD}));
+    uiLog(`loaded: rows=${rows.length}, goldPoints=${goldSeries.length}`);
 
     // Momentum (10d)
     let momentum=0;
@@ -113,6 +126,7 @@ function forecast(series, horizonDays){
     };
     const assess = assessDrivers(latestDelta);
     const $drv = document.getElementById('drivers');
+    $drv.innerHTML = ''; // clear
     Object.keys(labels).forEach(k=>{
       const a = assess[k]||{status:"neutral",msg:"Neutral"};
       const el=document.createElement('div');
@@ -131,18 +145,10 @@ function forecast(series, horizonDays){
     document.getElementById('sig-dot').className = `dot ${rec.status}`;
     document.getElementById('sig-text').textContent = rec.text;
 
-    // Spot/Status
-    const spotTs = spot.timestamp? new Date(spot.timestamp):null;
-    document.getElementById('spotline').textContent =
-      `Spot: ${spot.XAUUSD!=null ? Number(spot.XAUUSD).toFixed(2)+' USD/oz' : '—'}`;
-
-    const lastHist = rows.length? rows[rows.length-1].date : null;
-    document.getElementById('sys-status').textContent =
-      `Letztes History-Datum: ${lastHist||'—'} • Datenquelle: FRED, stooq`;
-
-    // Forecasts (robust; bei <90 Punkten „—“)
+    // Forecasts
     const horizons=[30,90,180];
     const $fc = document.getElementById('forecast');
+    $fc.innerHTML = '';
     horizons.forEach(h=>{
       const f = forecast(goldSeries, h);
       const last = goldSeries.length ? goldSeries[goldSeries.length-1].price : null;
@@ -159,22 +165,10 @@ function forecast(series, horizonDays){
       $fc.appendChild(wrap);
     });
 
-    // Historische Analogien (optional, nur bei genug Daten)
-    const $an = document.getElementById('analogs');
-    if(rows.length>120){
-      // 10T-Relative für alle Zeitpunkte
-      const deltas = rows.map(r=>{
-        const d = {timestamp:r.date};
-        for(const k of Object.keys(latestDelta)) d[k]=null;
-        return d;
-      });
-      for(let i=10;i<rows.length;i++){
-        const win0 = rows[i-10], winN = rows[i], di = deltas[i];
-        for(const k of Object.keys(latestDelta)){
-          const vN = winN[k], v0 = win0[k];
-          if(isFinite(vN)&&isFinite(v0)&&Math.abs(v0)>1e-9) di[k]=(vN-v0)/Math.abs(v0);
-        }
-      }
-      // Z-Scores
-      const refStats={};
-      for(const k of Object.keys(latestDelt
+    uiLog('render complete.');
+  }catch(e){
+    console.error("App-Fehler:", e);
+    document.getElementById('sig-text').textContent = 'Fehler beim Laden';
+    uiLog('ERROR: ' + String(e?.message || e));
+  }
+})();
