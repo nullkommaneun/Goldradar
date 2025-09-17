@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
 """
-Vollautomatischer Vendor-Fetch (verbessert):
-- Respektiert robots.txt (urllib.robotparser)
-- Liest strukturierte Daten: JSON-LD, Microdata, RDFa (extruct)
-- Findet Produktseiten über Sitemaps + Kategorieseiten (Produktlinks)
-- Klassifiziert Standardprodukte (bar-100g, coin-1oz-maple, coin-1oz-krugerrand, coin-1oz)
-- Berechnet Premium ggü. Spot (USD/kg) + ECB EURUSD
-- Schreibt data/vendors_auto.json
+Vollautomatischer Vendor-Fetch (mit Diagnostics):
+- robots.txt (urllib.robotparser)
+- strukturierte Daten: JSON-LD, Microdata, RDFa (extruct)
+- Produktseiten via Sitemaps + Kategorieseiten (Produktlinks)
+- Standardprodukte klassifizieren
+- Premium ggü. Spot (USD/kg) + ECB EURUSD
+- schreibt data/vendors_auto.json inkl. diagnostics
 """
 
 from __future__ import annotations
@@ -24,7 +24,6 @@ ROOT = Path(__file__).resolve().parents[1]
 DATA_DIR = ROOT / "data"
 DATA_DIR.mkdir(parents=True, exist_ok=True)
 
-# Whitelist seriöser Domains – erweiterbar
 WHITELIST = [
     "proaurum.de",
     "degussa-goldhandel.de",
@@ -36,15 +35,14 @@ HEADERS = {
 }
 
 OZ_TO_G = 31.1034768
-USD_PER_EUR_DEFAULT = 1.08  # Fallback, falls ECB nicht erreichbar
+USD_PER_EUR_DEFAULT = 1.08
 HTTP_TIMEOUT = 20.0
 
-# Crawling-Limits (konservativ)
-MAX_URLS_PER_DOMAIN = 120     # mehr Coverage
-MAX_SITEMAPS = 8              # max. verfolgte Sitemap/Index-Links
-REQ_DELAY = 1.0               # s
+MAX_URLS_PER_DOMAIN = 120
+MAX_SITEMAPS = 8
+REQ_DELAY = 1.0  # s
 
-# ---- Fetch helpers ----------------------------------------------------------
+# ----------------- Fetch helpers -----------------
 def fetch(client: httpx.Client, url: str) -> httpx.Response | None:
     try:
         return client.get(url, timeout=HTTP_TIMEOUT, headers=HEADERS, follow_redirects=True)
@@ -76,7 +74,7 @@ def get_spot_usd_per_kg() -> float | None:
     except Exception:
         return None
 
-# ---- robots.txt (stdlib) ----------------------------------------------------
+# ----------------- robots.txt -----------------
 _robots_cache: dict[str, robotparser.RobotFileParser] = {}
 def robots_ok(domain: str, url: str) -> bool:
     try:
@@ -84,7 +82,8 @@ def robots_ok(domain: str, url: str) -> bool:
         if rp is None:
             rp = robotparser.RobotFileParser()
             rp.set_url(f"https://{domain}/robots.txt")
-            try: rp.read()
+            try:
+                rp.read()
             except Exception:
                 _robots_cache[domain] = rp
                 return not any(seg in url for seg in ("/wp-admin", "/admin", "/cart"))
@@ -93,7 +92,7 @@ def robots_ok(domain: str, url: str) -> bool:
     except Exception:
         return True
 
-# ---- URL Discovery ----------------------------------------------------------
+# ----------------- Discovery -----------------
 KW_PATH = ("gold", "barren", "bar", "maple", "kruger", "krügerrand", "coin", "unze", "1oz", "100g", "100-g", "1-oz")
 def looks_product_path(path: str) -> bool:
     p = path.lower()
@@ -101,7 +100,6 @@ def looks_product_path(path: str) -> bool:
 
 def discover_from_sitemaps(client: httpx.Client, domain: str) -> list[str]:
     urls=set()
-    checked=0
     for sm in (f"https://{domain}/sitemap.xml", f"https://{domain}/sitemap_index.xml"):
         if not robots_ok(domain, sm): continue
         r = fetch(client, sm); time.sleep(REQ_DELAY)
@@ -111,7 +109,7 @@ def discover_from_sitemaps(client: httpx.Client, domain: str) -> list[str]:
             locs = [l for l in doc.xpath("//loc/text()") if isinstance(l,str)]
         except Exception:
             locs = []
-        # Wenn sitemapindex → tiefergehen (begrenzt)
+        # tiefer in Sub-Sitemaps
         submaps = [u for u in locs if u.endswith(".xml")]
         for u in submaps[:MAX_SITEMAPS]:
             if not robots_ok(domain, u): continue
@@ -119,11 +117,10 @@ def discover_from_sitemaps(client: httpx.Client, domain: str) -> list[str]:
             if not (r2 and r2.status_code==200): continue
             try:
                 doc2 = html.fromstring(r2.content)
-                locs2 = [l for l in doc2.xpath("//loc/text()") if isinstance(l,str)]
-                locs += locs2
+                locs += [l for l in doc2.xpath("//loc/text()") if isinstance(l,str)]
             except Exception:
                 pass
-        # URLs sammeln
+        # Produkt-URLs sammeln
         for u in locs:
             pu = urlparse(u)
             if not pu.netloc.endswith(domain): continue
@@ -134,7 +131,6 @@ def discover_from_sitemaps(client: httpx.Client, domain: str) -> list[str]:
     return list(urls)
 
 def extract_links_from_page(base_url: str, r: httpx.Response) -> list[str]:
-    """Auf Kategorieseiten Produktlinks finden (heuristisch)."""
     out=[]
     try:
         doc = html.fromstring(r.content)
@@ -150,7 +146,6 @@ def extract_links_from_page(base_url: str, r: httpx.Response) -> list[str]:
 
 def find_candidate_urls(client: httpx.Client, domain: str) -> list[str]:
     urls = set(discover_from_sitemaps(client, domain))
-    # Fallback: Startseite + offensichtliche Kategorien
     if len(urls) < 10:
         home = f"https://{domain}/"
         if robots_ok(domain, home):
@@ -161,23 +156,21 @@ def find_candidate_urls(client: httpx.Client, domain: str) -> list[str]:
                     if len(urls) >= MAX_URLS_PER_DOMAIN: break
     return list(urls)[:MAX_URLS_PER_DOMAIN]
 
-# ---- Structured Data Parsing ------------------------------------------------
+# ----------------- Structured Data -----------------
 def parse_structured(html_bytes: bytes, base_url: str) -> dict:
     data = {"products":[]}
     try:
         ext = extruct.extract(
             html_bytes, base_url=base_url,
-            syntaxes=["json-ld","microdata","rdfa"],  # erweitert
+            syntaxes=["json-ld","microdata","rdfa"],
             uniform=True
         )
     except Exception:
         try:
-            # Minimal-Fallback: nur JSON-LD
             ext = {"json-ld": JsonLdExtractor().extract(html_bytes.decode("utf-8","ignore"))}
         except Exception:
             ext = {}
 
-    # JSON-LD
     for node in ext.get("json-ld", []) or []:
         if isinstance(node, dict):
             types = node.get("@type")
@@ -185,14 +178,12 @@ def parse_structured(html_bytes: bytes, base_url: str) -> dict:
                          (isinstance(types,list) and any((isinstance(t,str) and t.lower()=="product") for t in types))
             if is_product:
                 data["products"].append(node)
-            # ItemList (Liste von Produkten)
             if (node.get("@type")=="ItemList") and isinstance(node.get("itemListElement"), list):
                 for it in node["itemListElement"]:
                     u = it.get("url") or (it.get("item") or {}).get("@id")
                     if isinstance(u,str):
                         data.setdefault("links",[]).append(u)
 
-    # Microdata / RDFa zu Product vereinheitlichen (extruct-Struktur ist verschachtelt)
     for syntax in ("microdata","rdfa"):
         for node in ext.get(syntax, []) or []:
             try:
@@ -204,21 +195,18 @@ def parse_structured(html_bytes: bytes, base_url: str) -> dict:
                     is_product = t.lower().endswith("product")
                 if is_product:
                     props = node.get("properties") or {}
-                    # mappe auf Product-ähnliches Dict
-                    prod = {
-                        "@type":"Product",
-                        "name": props.get("name"),
-                        "description": props.get("description"),
-                        "weight": props.get("weight"),
-                        "offers": props.get("offers"),
-                    }
+                    prod = {"@type":"Product",
+                            "name": props.get("name"),
+                            "description": props.get("description"),
+                            "weight": props.get("weight"),
+                            "offers": props.get("offers")}
                     data["products"].append(prod)
             except Exception:
                 continue
 
     return data
 
-# ---- Product Normalisierung -------------------------------------------------
+# ----------------- Normalisierung -----------------
 def as_float(x):
     try:
         if isinstance(x, str):
@@ -285,18 +273,22 @@ def best_offer(prod: dict) -> dict | None:
     if not cands: return None
     return sorted(cands, key=lambda x: x["price"])[0]
 
-# ---- Main -------------------------------------------------------------------
+# ----------------- Main -----------------
 def main():
     out = {
         "generated": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
         "fx": {},
         "products": ["bar-100g","coin-1oz-maple","coin-1oz-krugerrand","coin-1oz"],
-        "vendors": []
+        "vendors": [],
+        "diagnostics": {
+            "totals": {"domains": 0, "pages": 0, "products": 0, "offers": 0, "items": 0},
+            "domains": []
+        }
     }
 
     spot_usd_per_kg = get_spot_usd_per_kg()
     with httpx.Client(http2=True) as client:
-        eurusd = ecb_eurusd(client)  # USD pro EUR
+        eurusd = ecb_eurusd(client)
         out["fx"]["EURUSD"] = eurusd
 
         spot_eur_per_g = None
@@ -306,23 +298,34 @@ def main():
             spot_eur_per_g = eur_per_g
 
         for domain in WHITELIST:
+            dstat = {"domain": domain, "pages": 0, "products": 0, "offers": 0, "items": 0, "notes": []}
+            out["diagnostics"]["domains"].append(dstat)
+            out["diagnostics"]["totals"]["domains"] += 1
+
             vendor = {"domain": domain, "trust": 90, "items": []}
             urls = find_candidate_urls(client, domain)
             seen = set()
+
             for u in urls:
                 pu = urlparse(u)
                 if pu.netloc and not pu.netloc.endswith(domain): continue
                 if u in seen: continue
                 seen.add(u)
-                if not robots_ok(domain, u): continue
-                r = fetch(client, u); time.sleep(REQ_DELAY)
-                if not r or r.status_code != 200 or not r.content: continue
+                if not robots_ok(domain, u): 
+                    dstat["notes"].append(f"blocked robots: {u}")
+                    continue
 
-                # Strukturierte Daten lesen
+                r = fetch(client, u); time.sleep(REQ_DELAY)
+                if not r or r.status_code != 200 or not r.content: 
+                    dstat["notes"].append(f"bad status: {u} ({getattr(r,'status_code',None)})")
+                    continue
+                dstat["pages"] += 1
+
                 data = parse_structured(r.content, u)
                 products = data.get("products") or []
+                dstat["products"] += len(products)
 
-                # Falls ItemList/Links gefunden → tiefer besuchen (sehr begrenzt)
+                # ggf. ItemList-Links kurz besuchen
                 for link in (data.get("links") or [])[:10]:
                     if link in seen: continue
                     if not robots_ok(domain, link): continue
@@ -330,7 +333,10 @@ def main():
                     seen.add(link)
                     if r2 and r2.status_code==200 and r2.content:
                         more = parse_structured(r2.content, link)
-                        products.extend(more.get("products") or [])
+                        ps = more.get("products") or []
+                        dstat["pages"] += 1
+                        dstat["products"] += len(ps)
+                        products.extend(ps)
 
                 for prod in products:
                     name = (prod.get("name") or "").strip()
@@ -340,6 +346,7 @@ def main():
                     if not cls: continue
                     offer = best_offer(prod)
                     if not offer: continue
+                    dstat["offers"] += 1
 
                     price = offer["price"]; cur = offer["currency"]
                     if cur == "USD":
@@ -365,19 +372,27 @@ def main():
                             item["premium"] = round(prem, 4)
                         else:
                             item["premium"] = None
+
                     vendor["items"].append(item)
 
-            # je Produkt bestes Angebot behalten
+            # bestes Angebot je Produkt
             best = {}
             for it in vendor["items"]:
                 p = it["product"]
                 if p not in best or (it.get("premium") is not None and (best[p].get("premium") is None or it["premium"] < best[p]["premium"])):
                     best[p] = it
             vendor["items"] = list(best.values())
+
+            dstat["items"] += len(vendor["items"])
+            out["diagnostics"]["totals"]["pages"]    += dstat["pages"]
+            out["diagnostics"]["totals"]["products"] += dstat["products"]
+            out["diagnostics"]["totals"]["offers"]   += dstat["offers"]
+            out["diagnostics"]["totals"]["items"]    += dstat["items"]
+
             out["vendors"].append(vendor)
 
     (DATA_DIR / "vendors_auto.json").write_text(json.dumps(out, ensure_ascii=False, indent=2), encoding="utf-8")
     print("Wrote data/vendors_auto.json with", len(out["vendors"]), "vendors")
-
+    print("Diagnostics:", json.dumps(out["diagnostics"], ensure_ascii=False))
 if __name__ == "__main__":
     main()
