@@ -567,3 +567,110 @@ function updateHoldingsValue(){
     document.body.classList.remove('is-loading');
   }
 })();
+
+/* ------------- HINWEIS -------------
+   Dieser Ausschnitt fügt NUR die Vendor-Logik hinzu.
+   Lass den bereits bei dir laufenden Code unverändert
+   und füge die folgenden Funktionen + Aufrufpunkte hinzu.
+------------------------------------*/
+
+// Farblogik für Premium
+function premiumBadgeClass(prem){
+  if (!Number.isFinite(prem)) return 'neutral';
+  if (prem <= 0.03) return 'green';
+  if (prem <= 0.06) return 'yellow';
+  return 'red';
+}
+function fmtEUR(n){
+  return new Intl.NumberFormat('de-DE',{style:'currency',currency:'EUR',maximumFractionDigits:0}).format(n);
+}
+
+// Vendor UI
+async function renderVendorsCard(){
+  const list = document.getElementById('vendors-list');
+  const note = document.getElementById('vendors-note');
+  const sel  = document.getElementById('vendor-product');
+  if (!list || !note || !sel) return;
+
+  async function loadAndRender(){
+    list.innerHTML = '<div class="driver skeleton"><div class="skeleton-bar"></div></div>';
+    try{
+      const vend = await fetch('data/vendors_auto.json?t='+Date.now()).then(r=>r.json());
+      const product = sel.value;
+      const items = [];
+
+      (vend.vendors||[]).forEach(v=>{
+        (v.items||[]).forEach(it=>{
+          if (it.product === product){
+            items.push({
+              domain: v.domain,
+              trust: v.trust,
+              name: it.name,
+              price: it.price?.value ?? null,
+              currency: it.price?.currency ?? 'EUR',
+              prem: it.premium,
+              url: it.url,
+              checked_at: it.checked_at,
+              shipping_included: it.price?.shipping_included ?? null
+            });
+          }
+        });
+      });
+
+      // sort: primär nach Premium (niedrig), sekundär nach Trust (hoch)
+      items.sort((a,b)=>{
+        const pa = Number.isFinite(a.prem) ? a.prem : 99;
+        const pb = Number.isFinite(b.prem) ? b.prem : 99;
+        if (pa !== pb) return pa - pb;
+        return (b.trust||0) - (a.trust||0);
+      });
+
+      list.innerHTML = '';
+      if (!items.length){
+        const div = document.createElement('div');
+        div.className = 'vendor-card';
+        div.innerHTML = `<div><strong>Keine Angebote gefunden</strong><div class="info-line">Wir konnten für dieses Produkt aktuell keinen Preis aus JSON-LD lesen.</div></div>`;
+        list.appendChild(div);
+      } else {
+        items.forEach(it=>{
+          const div = document.createElement('div');
+          const cls = premiumBadgeClass(it.prem);
+          const premTxt = Number.isFinite(it.prem) ? ((it.prem*100).toFixed(1)+'%') : '—';
+          const ship = it.shipping_included === true ? 'inkl. Versand' : it.shipping_included === false ? 'zzgl. Versand' : '';
+          div.className = 'vendor-card';
+          div.innerHTML = `
+            <div>
+              <strong>${it.domain}</strong>
+              <div class="info-line">${it.name || ''}</div>
+              <div class="info-line">Preis: ${Number.isFinite(it.price)? fmtEUR(it.price): '—'} ${ship? '• '+ship:''}</div>
+            </div>
+            <div class="vendor-actions">
+              <span class="badge prem ${cls}" title="Aufschlag ggü. Spot">${premTxt}</span>
+              <a class="btn" href="${it.url}" target="_blank" rel="noopener">Zum Händler</a>
+            </div>`;
+          list.appendChild(div);
+        });
+      }
+
+      const hours = vend.fx?.EURUSD ? '' : ' • (FX Fallback)';
+      const newest = (items[0]?.checked_at) ? `Stand: ${new Date(items[0].checked_at).toLocaleString('de-DE')}` : 'Stand: —';
+      note.textContent = `${newest}${hours} • Quellen: Händler-JSON-LD`;
+    }catch(e){
+      list.innerHTML = '';
+      const div = document.createElement('div');
+      div.className = 'vendor-card';
+      div.innerHTML = `<div><strong>Händlerdaten nicht verfügbar</strong><div class="info-line">vendors_auto.json konnte nicht geladen werden.</div></div>`;
+      list.appendChild(div);
+      note.textContent = '—';
+    }
+  }
+
+  sel.addEventListener('change', loadAndRender);
+  await loadAndRender();
+}
+
+// … Rufe renderVendorsCard() am Ende deines bestehenden Initialisierungscodes auf …
+document.addEventListener('DOMContentLoaded', () => {
+  // Falls du schon IIFE nutzt, kannst du den Aufruf dort einhängen:
+  setTimeout(renderVendorsCard, 0);
+});
