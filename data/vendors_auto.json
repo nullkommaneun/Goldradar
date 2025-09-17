@@ -1,0 +1,29 @@
+{
+  "generated": "2025-09-17T21:34:48Z",
+  "fx": {
+    "EURUSD": 1.08
+  },
+  "products": [
+    "bar-100g",
+    "coin-1oz-maple",
+    "coin-1oz-krugerrand",
+    "coin-1oz"
+  ],
+  "vendors": [
+    {
+      "domain": "proaurum.de",
+      "trust": 90,
+      "items": []
+    },
+    {
+      "domain": "degussa-goldhandel.de",
+      "trust": 90,
+      "items": []
+    },
+    {
+      "domain": "heubach-edelmetalle.de",
+      "trust": 90,
+      "items": []
+    }
+  ]
+}
