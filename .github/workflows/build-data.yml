@@ -3,7 +3,7 @@ name: Build Data
 on:
   workflow_dispatch:
   schedule:
-    - cron: "0 */2 * * *"  # alle 2 Stunden
+    - cron: "0 */2 * * *"
 
 permissions:
   contents: write
@@ -12,19 +12,16 @@ jobs:
   fetch-and-commit:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      - name: Set up Python
-        uses: actions/setup-python@v5
+      - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
 
       - name: Fetch data (FRED + stooq)
         env:
           FRED_API_KEY: ${{ secrets.FRED_API_KEY }}
-        run: |
-          python3 scripts/fetch_data.py
+        run: python3 scripts/fetch_data.py
 
       - name: Commit changes
         run: |
