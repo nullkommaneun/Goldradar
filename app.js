@@ -447,10 +447,14 @@ async function renderVendorsCard() {
         });
       }
 
-      // Fußnote mit Diagnostics
+      // Fußnote mit Diagnostics (Fix: keine Mischung von ?? und || ohne Klammern)
       const totals = vend.diagnostics?.totals || {};
       const gen = vend.generated ? new Date(vend.generated).toLocaleString('de-DE') : '—';
-      const statsLine = `Domains=${totals.domains ?? (vend.vendors || []).length || 0} • Seiten=${totals.pages ?? 0} • Produkte=${totals.products ?? 0} • Items=${totals.items ?? 0}`;
+      let domains = totals.domains;
+      if (!domains) {
+        domains = ((vend.vendors && vend.vendors.length) ? vend.vendors.length : 0);
+      }
+      const statsLine = `Domains=${domains} • Seiten=${totals.pages ?? 0} • Produkte=${totals.products ?? 0} • Items=${totals.items ?? 0}`;
       note.textContent = `Stand: ${gen} • ${statsLine} • Quellen: strukturierte Shop-Daten (JSON-LD/Microdata/RDFa)`;
     } catch (e) {
       list.innerHTML = '';
