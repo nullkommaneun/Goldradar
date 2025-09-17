@@ -10,6 +10,7 @@ function uiLog(msg) {
 const nowBust = () => '?t=' + Date.now();
 const pct = v => (isFinite(v) ? (v>=0?'+':'') + (100*v).toFixed(1) + '%' : '—');
 const SERIES = ["GOLDAMGBD228NLBM","DFII10","DTWEXBGS","VIXCLS","DCOILBRENTEU","T10YIE","BAMLH0A0HYM2","NAPM","RECPROUSM156N","T10Y2Y"];
+const DRIVER_KEYS = ["DFII10","DTWEXBGS","VIXCLS","DCOILBRENTEU","T10YIE","BAMLH0A0HYM2","NAPM","RECPROUSM156N","T10Y2Y"];
 
 // ---------- Driver assessment ----------
 function assessDrivers(t){
@@ -65,6 +66,28 @@ function forecast(series, horizonDays){
   return {median:med, lo, hi};
 }
 
+// ---------- Similarity helpers ----------
+function cosine(a,b){
+  let num=0,na=0,nb=0,c=0;
+  for(const k of DRIVER_KEYS){
+    const va=a[k], vb=b[k];
+    if(va==null || !isFinite(va) || vb==null || !isFinite(vb)) continue;
+    num += va*vb; na += va*va; nb += vb*vb; c++;
+  }
+  if(c===0) return -1;
+  return num/(Math.sqrt(na)*Math.sqrt(nb));
+}
+function zscoreVector(vec, stats){
+  const out={};
+  for(const k of DRIVER_KEYS){
+    const v = vec[k];
+    const m = stats[k]?.mean ?? 0;
+    const s = stats[k]?.std  ?? 1e-9;
+    out[k] = (v==null || !isFinite(v)) ? null : (v - m) / (s || 1e-9);
+  }
+  return out;
+}
+
 // ---------- App ----------
 (async function(){
   try{
@@ -74,11 +97,11 @@ function forecast(series, horizonDays){
       fetch('data/spot.json'+nowBust()).then(r=>r.json()).catch(()=>({XAUUSD:null,timestamp:null}))
     ]);
 
-    // Spot sofort anzeigen (EU-Maß: USD/kg – keine Umrechnung)
+    // Spot (EU-Maß: USD/kg)
     const spotVal = (spot && spot.XAUUSD!=null) ? Number(spot.XAUUSD) : null;
     document.getElementById('spotline').textContent = `Spot: ${spotVal!=null ? spotVal.toFixed(2)+' USD/kg' : '—'}`;
 
-    // Normalisiere Rows
+    // Rows
     const rows = (hist.history||[]).map(r=>({
       date: r.timestamp,
       GOLD:r.GOLDAMGBD228NLBM??null,
@@ -97,14 +120,21 @@ function forecast(series, horizonDays){
       if(isFinite(last) && isFinite(prev) && prev>0) momentum = Math.log(last/prev)/10;
     }
 
-    // Deltas (10d relativ)
+    // --- Deltas (10d relativ) – robust: wenn Basis/Neu ~ 0 -> null ---
     function shortDelta(arr, key){
-      const list = arr.map(r=> ({d:r.date, v:r[key]})).filter(x=>isFinite(x.v));
-      if(list.length<11) return null;
-      const vN=list[list.length-1].v, vP=list[list.length-11].v;
-      if(!isFinite(vN)||!isFinite(vP)) return null;
-      const base=Math.max(1e-9,Math.abs(vP));
-      return (vN-vP)/base;
+      // Sammle die letzten 20 validen Punkte (falls Lücken)
+      const vals = [];
+      for(let i=arr.length-1; i>=0 && vals.length<20; i--){
+        const v = arr[i][key];
+        if(isFinite(v)) vals.push({idx:i, v});
+      }
+      if(vals.length < 11) return null;
+      const vN = vals[0].v;                  // „heute“
+      const vP = vals[10].v;                 // ~10 Perioden vorher
+      const tiny = 1e-6;
+      if(!isFinite(vN) || !isFinite(vP)) return null;
+      if(Math.abs(vP) < tiny || Math.abs(vN) < tiny) return null; // vermeidet künstliche −100 %
+      return (vN - vP) / Math.abs(vP);
     }
     const latestDelta = {
       DFII10: shortDelta(rows,'DFII10'),
@@ -118,7 +148,7 @@ function forecast(series, horizonDays){
       T10Y2Y: shortDelta(rows,'T10Y2Y')
     };
 
-    // Treiber rendern
+    // Treiber rendern (— bei null)
     const labels = {
       DFII10:"Realzinsen (Zinskosten)", DTWEXBGS:"US-Dollar (Dollar-Stärke)", VIXCLS:"VIX (Marktstress)",
       DCOILBRENTEU:"Ölpreis (Inflationstreiber)", T10YIE:"Inflationserwartung", BAMLH0A0HYM2:"HY-Spreads",
@@ -126,14 +156,15 @@ function forecast(series, horizonDays){
     };
     const assess = assessDrivers(latestDelta);
     const $drv = document.getElementById('drivers');
-    $drv.innerHTML = ''; // clear
+    $drv.innerHTML = '';
     Object.keys(labels).forEach(k=>{
       const a = assess[k]||{status:"neutral",msg:"Neutral"};
+      const dval = isFinite(latestDelta[k]) ? ((latestDelta[k]>=0?'+':'')+(100*latestDelta[k]).toFixed(1)+'%/10T') : '—';
       const el=document.createElement('div');
       el.className='driver';
       el.innerHTML = `
         <div class="ampel"><div class="dot ${a.status}"></div><div class="msg"><strong>${labels[k]}</strong><br><span class="muted">${a.msg}</span></div></div>
-        <div class="pill">${isFinite(latestDelta[k])? (latestDelta[k]>=0? '+' : '')+(100*latestDelta[k]).toFixed(1)+'%/10T' : '—'}</div>`;
+        <div class="pill">${dval}</div>`;
       $drv.appendChild(el);
     });
 
@@ -164,6 +195,91 @@ function forecast(series, horizonDays){
         <span class="band">[${bandLo}, ${bandHi}]</span></span>`;
       $fc.appendChild(wrap);
     });
+
+    // ---------- Historischer Vergleich (ausgebaut) ----------
+    const $an = document.getElementById('analogs');
+    $an.innerHTML = '';
+
+    // 10T-Relative für alle Zeitpunkte (wie oben, aber für jede t-Position)
+    const deltaRows = rows.map(r=>{
+      const d = {timestamp:r.date};
+      for(const k of DRIVER_KEYS) d[k]=null;
+      return d;
+    });
+    for(let i=0; i<rows.length; i++){
+      for(const k of DRIVER_KEYS){
+        // suche gültige „heute“ und „-10T“ Werte rückwärts
+        let count=0, idxN=i, idxP=i, foundN=null, foundP=null;
+        // N: nehme ersten validen ab i rückwärts
+        for(let j=i; j>=0; j--){ const v=rows[j][k]; if(isFinite(v)){ foundN=v; idxN=j; break; } }
+        // P: ~10 valide zurück
+        for(let j=idxN-1; j>=0; j--){ const v=rows[j][k]; if(isFinite(v)){ count++; if(count===10){ foundP=v; idxP=j; break; } } }
+        const tiny=1e-6;
+        if(isFinite(foundN) && isFinite(foundP) && Math.abs(foundP)>=tiny && Math.abs(foundN)>=tiny){
+          deltaRows[i][k] = (foundN - foundP) / Math.abs(foundP);
+        } else {
+          deltaRows[i][k] = null;
+        }
+      }
+    }
+
+    // Referenz-Stats (für Z-Scores)
+    const refStats={};
+    for(const k of DRIVER_KEYS){
+      const vals = deltaRows.map(d=>d[k]).filter(v=>isFinite(v));
+      const m = vals.length? vals.reduce((a,b)=>a+b,0)/vals.length : 0;
+      const s = vals.length? Math.sqrt(vals.reduce((a,b)=>a+(b-m)*(b-m),0)/vals.length) : 1;
+      refStats[k]={mean:m,std:s||1e-9};
+    }
+
+    const currentZ = zscoreVector(latestDelta, refStats);
+
+    // scorings: nur bis rows.length-60 (damit 90T-Rendite verfügbar)
+    const cutoff = rows.length-60;
+    const scored=[];
+    for(let i=20;i<cutoff;i++){
+      const vecZ = zscoreVector(deltaRows[i], refStats);
+      const sim = cosine(currentZ, vecZ);
+      if(sim>0) scored.push({i, sim, date: rows[i].date});
+    }
+    scored.sort((a,b)=>b.sim - a.sim);
+
+    // Hilfsfunktion: 90T-Performance aus Goldserie zum Datum
+    function perf90d(dateStr){
+      let baseIdx = goldSeries.findIndex(g=>g.date>=dateStr);
+      if(baseIdx>=0){
+        const fwd = baseIdx+90;
+        if(fwd < goldSeries.length){
+          const r = goldSeries[baseIdx], f = goldSeries[fwd];
+          return ((f.price/r.price - 1)*100);
+        }
+      }
+      return null;
+    }
+
+    const threshold = 0.60;
+    const top = scored.filter(s=>s.sim>=threshold).slice(0,3);
+    if(top.length>0){
+      top.forEach(hit=>{
+        const p90 = perf90d(hit.date);
+        const div=document.createElement('div'); div.className='driver';
+        const mo = new Date(hit.date).toLocaleDateString('de-DE',{year:'numeric',month:'long'});
+        div.innerHTML=`<div><strong>Ähnlich zu ${mo}</strong><div class="muted">Ähnlichkeit: ${(100*hit.sim).toFixed(0)}%</div></div><div class="pill">90-Tage: ${p90!=null? p90.toFixed(1)+'%':'—'}</div>`;
+        $an.appendChild(div);
+      });
+    } else {
+      // Fallback: besten Treffer zeigen, falls irgendeine Ähnlichkeit > 0 existiert
+      const best = scored.length? scored[0] : null;
+      const div=document.createElement('div'); div.className='driver';
+      if(best){
+        const mo = new Date(best.date).toLocaleDateString('de-DE',{year:'numeric',month:'long'});
+        const p90 = perf90d(best.date);
+        div.innerHTML=`<div><strong>Nächster Treffer: ${mo}</strong><div class="muted">Ähnlichkeit: ${(100*best.sim).toFixed(0)}% (kein klarer Match)</div></div><div class="pill">90-Tage: ${p90!=null? p90.toFixed(1)+'%':'—'}</div>`;
+      } else {
+        div.innerHTML=`<div><strong>Keine Historie vergleichbar</strong><div class="muted">Zu wenig verwertbare Treiberdaten</div></div><div class="pill">—</div>`;
+      }
+      $an.appendChild(div);
+    }
 
     uiLog('render complete.');
   }catch(e){
