@@ -6,57 +6,6 @@
   <title>Gold-Kauf-Signal</title>
   <link rel="stylesheet" href="style.css">
   <link rel="preload" href="style.css" as="style">
-<script>
-(function(){
-  var buffer = [];
-
-  function stamp(msg){
-    var t = new Date().toISOString().slice(11,19);
-    return "["+t+"] " + msg;
-  }
-
-  function write(msg){
-    try{
-      var el = document.getElementById('diag');
-      if (el) {
-        // Puffer zuerst leeren, dann aktuelle Zeile
-        if (buffer.length){
-          el.textContent += "\n" + buffer.map(stamp).join("\n");
-          buffer = [];
-        }
-        el.textContent += "\n" + stamp(msg);
-      } else {
-        buffer.push(msg);
-      }
-    }catch(_){ /* noop */ }
-  }
-
-  // DOM bereit? -> Puffer flushen
-  function flushIfReady(){
-    var el = document.getElementById('diag');
-    if (el && buffer.length){
-      el.textContent += "\n" + buffer.map(stamp).join("\n");
-      buffer = [];
-    }
-  }
-  document.addEventListener('DOMContentLoaded', flushIfReady);
-
-  // Globale Haken
-  window.addEventListener('error', function(e){
-    var msg = "JS-Error: " + (e && e.message ? e.message : "unknown");
-    if (e && e.filename) msg += " @ " + e.filename + (e.lineno? (":"+e.lineno):"");
-    write(msg);
-  });
-  window.addEventListener('unhandledrejection', function(e){
-    var r = e && e.reason;
-    var msg = "Unhandled promise: " + (r ? (r.message || String(r)) : "unknown");
-    write(msg);
-  });
-
-  // Exponiere für manuelle Logs (optional)
-  window.__GKS_LOG = function(m){ write(String(m||"")); };
-})();
-</script>
 
 </head>
 <body class="is-loading">
@@ -201,6 +150,58 @@
     </div>
   </main>
 
+<script>
+(function(){
+  var buffer = [];
+
+  function stamp(msg){
+    var t = new Date().toISOString().slice(11,19);
+    return "["+t+"] " + msg;
+  }
+
+  function write(msg){
+    try{
+      var el = document.getElementById('diag');
+      if (el) {
+        // Puffer zuerst leeren, dann aktuelle Zeile
+        if (buffer.length){
+          el.textContent += "\n" + buffer.map(stamp).join("\n");
+          buffer = [];
+        }
+        el.textContent += "\n" + stamp(msg);
+      } else {
+        buffer.push(msg);
+      }
+    }catch(_){ /* noop */ }
+  }
+
+  // DOM bereit? -> Puffer flushen
+  function flushIfReady(){
+    var el = document.getElementById('diag');
+    if (el && buffer.length){
+      el.textContent += "\n" + buffer.map(stamp).join("\n");
+      buffer = [];
+    }
+  }
+  document.addEventListener('DOMContentLoaded', flushIfReady);
+
+  // Globale Haken
+  window.addEventListener('error', function(e){
+    var msg = "JS-Error: " + (e && e.message ? e.message : "unknown");
+    if (e && e.filename) msg += " @ " + e.filename + (e.lineno? (":"+e.lineno):"");
+    write(msg);
+  });
+  window.addEventListener('unhandledrejection', function(e){
+    var r = e && e.reason;
+    var msg = "Unhandled promise: " + (r ? (r.message || String(r)) : "unknown");
+    write(msg);
+  });
+
+  // Exponiere für manuelle Logs (optional)
+  window.__GKS_LOG = function(m){ write(String(m||"")); };
+})();
+</script>
+  
   <!-- Fehlerfalle VOR allen anderen Skripten -->
   <script src="errors.js?v=1"></script>
 
