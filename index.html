@@ -149,8 +149,15 @@
     </div>
   </main>
 
-  <script src="preflight.js" defer></script>
-  <script src="app.js" defer></script>
+  <!-- Fehlerfalle VOR allen anderen Skripten -->
+  <script src="errors.js?v=1"></script>
+
+  <!-- Preflight (behält Diagnose) -->
+  <script src="preflight.js?v=1" defer></script>
+
+  <!-- App (Hauptlogik) -->
+  <script src="app.js?v=1" defer></script>
+
   <script>
     if ('serviceWorker' in navigator) {
       navigator.serviceWorker.register('./sw.js').catch(()=>{});
