@@ -1,5 +1,5 @@
 {
-  "generated": "2025-09-17T21:44:50Z",
+  "generated": "2025-09-17T22:20:49Z",
   "fx": {
     "EURUSD": 1.08
   },
@@ -25,5 +25,40 @@
       "trust": 90,
       "items": []
     }
-  ]
+  ],
+  "diagnostics": {
+    "totals": {
+      "domains": 3,
+      "pages": 130,
+      "products": 0,
+      "offers": 0,
+      "items": 0
+    },
+    "domains": [
+      {
+        "domain": "proaurum.de",
+        "pages": 0,
+        "products": 0,
+        "offers": 0,
+        "items": 0,
+        "notes": []
+      },
+      {
+        "domain": "degussa-goldhandel.de",
+        "pages": 120,
+        "products": 0,
+        "offers": 0,
+        "items": 0,
+        "notes": []
+      },
+      {
+        "domain": "heubach-edelmetalle.de",
+        "pages": 10,
+        "products": 0,
+        "offers": 0,
+        "items": 0,
+        "notes": []
+      }
+    ]
+  }
 }
