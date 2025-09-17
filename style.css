@@ -1,0 +1,17 @@
+:root {
+  --bg:#0b0f12; --card:#10161a; --ink:#e7edf2;
+  --muted:#98a2ad; --ok:#1dd18a; --warn:#ffcc47;
+  --bad:#ff5a63; --neu:#596573; --accent:#55b5ff;
+}
+
+body { margin:0; background:var(--bg); color:var(--ink);
+       font:16px/1.5 system-ui,Segoe UI,Roboto,Helvetica,Arial; }
+
+header { position:sticky; top:0; background:rgba(11,15,18,.85);
+         backdrop-filter:blur(6px); border-bottom:1px solid #162028; z-index:5; }
+
+/* … Rest wie gehabt (Grid, Card, Ampel, Badge etc.) … */
+
+.diag { margin-top:8px; padding:8px; border-radius:10px;
+        background:#0e1317; border:1px solid #1a2430;
+        font-size:.85rem; color:#c9d3dc; white-space:pre-wrap; }
