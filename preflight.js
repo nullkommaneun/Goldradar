@@ -178,3 +178,76 @@
 
   run();
 })();
+
+(function(){
+  const diagEl = () => document.getElementById('diag');
+  const log = (m) => { const t = new Date().toISOString().slice(11,19); const el=diagEl(); if(el){ el.textContent += `\n[${t}] ${m}`; } };
+
+  async function json(url){ try{ const r = await fetch(url + '?t=' + Date.now()); return await r.json(); } catch(_){ return null; } }
+
+  async function run(){
+    window.PREFLIGHT = window.PREFLIGHT || {};
+    const pf = window.PREFLIGHT;
+    pf.errors = pf.errors || [];
+    pf.warnings = pf.warnings || [];
+    pf.stats = pf.stats || {};
+
+    log("Preflight startet …");
+    // History
+    const hist = await json('data/history.json');
+    if (hist && Array.isArray(hist.history) && hist.history.length){
+      const rows = hist.history;
+      pf.stats.history = {
+        start: rows[0].timestamp,
+        end: rows[rows.length-1].timestamp,
+        rows: rows.length
+      };
+    } else {
+      pf.errors.push("history.json fehlt/leer");
+    }
+
+    // Spot
+    const spot = await json('data/spot.json');
+    if (spot && typeof spot.XAUUSD !== 'undefined' && spot.XAUUSD !== null){
+      pf.stats.spot = { hasValue: true, timestamp: spot.timestamp || null };
+    } else {
+      pf.warnings.push("Kein aktueller Spotpreis (spot.json)");
+      pf.stats.spot = { hasValue: false };
+    }
+
+    // Vendors
+    const vend = await json('data/vendors_auto.json');
+    if (vend && Array.isArray(vend.vendors)){
+      const vendors = vend.vendors;
+      const withPrices = vendors.reduce((acc,v)=> acc + (Array.isArray(v.items) ? v.items.length : 0), 0);
+      // Stale-Check
+      let staleCount = 0, newest = 0, oldest = Number.MAX_SAFE_INTEGER;
+      (vendors||[]).forEach(v=>{
+        (v.items||[]).forEach(it=>{
+          const ts = Date.parse(it.checked_at || 0);
+          if (Number.isFinite(ts)) {
+            newest = Math.max(newest, ts);
+            oldest = Math.min(oldest, ts);
+          }
+        });
+      });
+      const now = Date.now();
+      staleCount = (vendors||[]).reduce((acc,v)=> acc + (v.items||[]).filter(it=> (now - Date.parse(it.checked_at||0)) > 48*3600*1000).length, 0);
+
+      pf.stats.vendors = {
+        count: vendors.length,
+        priced: withPrices,
+        updated_recent_hours: newest ? Math.floor((now - newest)/3600000) : null,
+        stale_items: staleCount
+      };
+      if (withPrices === 0) pf.warnings.push("Händlerdaten gefunden, aber keine Preise extrahiert.");
+      if (staleCount > 0) pf.warnings.push(`Veraltete Händlerpreise: ${staleCount}`);
+    } else {
+      pf.warnings.push("vendors_auto.json nicht verfügbar.");
+    }
+
+    log("Preflight OK");
+  }
+
+  run().catch(e => { (window.PREFLIGHT.errors = window.PREFLIGHT.errors || []).push(String(e)); });
+})();
