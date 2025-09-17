@@ -1,12 +1,37 @@
 #!/usr/bin/env python3
-import os, sys, json, csv, io, math, time, datetime as dt
+"""
+Robustes Datenskript für Gold-Kauf-Signal.
+
+- Holt FRED-Serien (mit Retries), toleriert Ausfälle (liefert dann leere Spalten -> nulls).
+- Holt GOLD-Historie redundant von stooq (mehrere Domains/Endpunkte) und merged sie.
+- Schreibt:
+    data/history.json  (vereinte tägliche Historie ~20 Jahre)
+    data/spot.json     (aktueller XAUUSD-Spot)
+    data/diag.json     (Diagnosezahlen & genutzte Quellen)
+
+Hinweise:
+- Keine künstliche Interpolation/Forward-Fill. Fehlende Werte bleiben null.
+- Forecast im Frontend benötigt >=90 valide GOLD-Punkte. Das ist Ziel von gold_backfill.
+
+Autor: Dein Projekt
+"""
+
+import os
+import sys
+import io
+import csv
+import json
+import math
+import time
+import datetime as dt
 from urllib.request import urlopen, Request
 from urllib.parse import urlencode
 
+# ------------------- Konfiguration -------------------
 FRED_API_KEY = os.getenv("FRED_API_KEY", "")
 FRED_BASE = "https://api.stlouisfed.org/fred/series/observations"
 SERIES = [
-    "GOLDAMGBD228NLBM",  # LBMA-Gold USD/oz (FRED, ggf. Lücken)
+    "GOLDAMGBD228NLBM",  # LBMA-Gold USD/oz (FRED; oft lückig)
     "DFII10",            # 10Y Real Yield
     "DTWEXBGS",          # Dollar Index Broad
     "VIXCLS",            # VIX
@@ -19,44 +44,40 @@ SERIES = [
 ]
 
 ROOT = os.path.dirname(__file__)
-OUT_DIR = os.path.join(ROOT, "..", "data")
+OUT_DIR = os.path.normpath(os.path.join(ROOT, "..", "data"))
 HISTORY_PATH = os.path.join(OUT_DIR, "history.json")
 SPOT_PATH = os.path.join(OUT_DIR, "spot.json")
 DIAG_PATH = os.path.join(OUT_DIR, "diag.json")
 
-# ------------- HTTP utils -------------
-def http_get(url, headers=None, timeout=30):
-    req = Request(url, headers=headers or {"User-Agent":"gold-signal-bot/1.0"})
+START_DAYS_BACK = 365 * 20 + 30  # ~20 Jahre + Puffer
+USER_AGENT = "gold-kaufsignal/1.1 (+github pages bot)"
+
+# ------------------- HTTP-Helfer -------------------
+def http_get(url: str, timeout: int = 30) -> bytes:
+    req = Request(url, headers={"User-Agent": USER_AGENT})
     with urlopen(req, timeout=timeout) as r:
         return r.read()
 
-def get_with_retries(urls, parse_fn, retries=3, sleep_s=1.2):
-    last_exc = None
+def try_urls(urls, parse_fn, retries=3, sleep_s=0.8, timeout=30):
+    """
+    Versucht nacheinander mehrere URLs. Für jede URL bis zu 'retries' Versuche.
+    Gibt beim ersten erfolgreichen Parse das Ergebnis zurück.
+    """
+    last_err = None
     for url in urls:
-        for attempt in range(1, retries+1):
+        for attempt in range(1, retries + 1):
             try:
-                raw = http_get(url)
-                return parse_fn(raw)
+                raw = http_get(url, timeout=timeout)
+                return parse_fn(raw), url, attempt
             except Exception as e:
-                last_exc = e
+                last_err = e
                 time.sleep(sleep_s)
-    if last_exc:
-        raise last_exc
+    if last_err:
+        raise last_err
+    raise RuntimeError("No URL attempted")
 
-# ------------- FRED -------------
-def fetch_fred_series(series_id, start_date):
-    if not FRED_API_KEY:
-        # Für dein Setup: wir verzichten aufs Abbrechen; liefern leere Map,
-        # damit UI neutral bleibt. Im diag.json wird das sichtbar.
-        return {}
-    params = {
-        "series_id": series_id,
-        "api_key": FRED_API_KEY,
-        "file_type": "json",
-        "observation_start": start_date
-    }
-    url = FRED_BASE + "?" + urlencode(params)
-    raw = http_get(url)
+# ------------------- Parser -------------------
+def parse_fred_json(raw: bytes):
     j = json.loads(raw.decode("utf-8"))
     obs = j.get("observations", [])
     out = {}
@@ -67,134 +88,191 @@ def fetch_fred_series(series_id, start_date):
             continue
         try:
             val = float(v)
-        except:
+        except Exception:
             val = None
         out[d] = val
     return out
 
-# ------------- stooq -------------
-def parse_stooq_daily_csv(raw_bytes):
-    text = raw_bytes.decode("utf-8", errors="ignore")
-    rdr = csv.reader(io.StringIO(text))
-    header = next(rdr, None)  # e.g. ["Date","Open","High","Low","Close","Volume"]
+def parse_stooq_daily_csv(raw: bytes):
+    """
+    Erwartet ein CSV mit Spalten: Date, Open, High, Low, Close, Volume
+    Liefert dict[YYYY-MM-DD] = float|None (Close)
+    """
+    txt = raw.decode("utf-8", errors="ignore")
+    rdr = csv.reader(io.StringIO(txt))
+    # Header line (überspringen, falls vorhanden)
+    header = next(rdr, None)
     out = {}
     for row in rdr:
         if not row or len(row) < 5:
             continue
-        d = row[0][:10]
+        d = (row[0] or "")[:10]
+        if not d:
+            continue
         try:
             close = float(row[4])
-        except:
+        except Exception:
             close = None
         out[d] = close
     return out
 
-def fetch_stooq_history():
-    """Hole XAUUSD Historie von mehreren stooq Endpunkten und merge."""
+def parse_stooq_spot_csv(raw: bytes):
+    """
+    Einzeiliges CSV: symbol,date,time,open,high,low,close,volume
+    """
+    txt = raw.decode("utf-8", errors="ignore")
+    rdr = csv.DictReader(io.StringIO(txt))
+    row = next(rdr, None)
+    if not row:
+        raise RuntimeError("stooq spot empty")
+    date = row.get("Date") or row.get("date") or ""
+    time_ = row.get("Time") or row.get("time") or "00:00:00"
+    close = row.get("Close") or row.get("close")
+    try:
+        px = float(close)
+    except Exception:
+        px = None
+    ts = f"{date[:10]}T{(time_ if len(time_)==8 else '00:00:00')}Z"
+    return {"timestamp": ts, "XAUUSD": px}
+
+# ------------------- Quellen-Clients -------------------
+def fetch_fred_series(series_id: str, start_date: str, retries=3, sleep_s=0.8):
+    """
+    Holt eine FRED-Serie. Bricht NICHT hart ab, wenn FRED_API_KEY fehlt.
+    Gibt dict[YYYY-MM-DD] = float|None zurück (evtl. leer).
+    """
+    if not FRED_API_KEY:
+        return {}
+
+    params = {
+        "series_id": series_id,
+        "api_key": FRED_API_KEY,
+        "file_type": "json",
+        "observation_start": start_date
+    }
+    url = FRED_BASE + "?" + urlencode(params)
+
+    last_err = None
+    for attempt in range(1, retries + 1):
+        try:
+            raw = http_get(url, timeout=30)
+            return parse_fred_json(raw)
+        except Exception as e:
+            last_err = e
+            time.sleep(sleep_s)
+    # Tolerant: leeres Mapping bei Fehler
+    return {}
+
+def fetch_stooq_gold_history():
+    """
+    Holt GOLD-Historie von mehreren stooq-Domains/Endpunkten und mergen.
+    """
     urls = [
         "https://stooq.com/q/d/l/?s=xauusd&i=d",
         "https://stooq.pl/q/d/l/?s=xauusd&i=d",
-        # Alternative (Adjustments/anderer Pfad), manchmal liefert diese länger zurück:
+        # alternative "adjusted"-Pfadvarianten, liefern oft denselben Inhalt
         "https://stooq.com/q/a/?s=xauusd&i=d",
         "https://stooq.pl/q/a/?s=xauusd&i=d",
     ]
+    used = []
     merged = {}
+
     for u in urls:
         try:
-            part = get_with_retries([u], parse_stooq_daily_csv, retries=3, sleep_s=0.8)
+            part, used_url, _ = try_urls([u], parse_stooq_daily_csv, retries=3, sleep_s=0.6)
+            used.append(used_url)
+            # Merge bevorzugt vorhandene Werte
             for d, v in part.items():
                 if d not in merged or merged[d] is None:
                     merged[d] = v
         except Exception:
-            # still try others
-            pass
-    return merged
+            # weiter probieren – wir wollen robust sein
+            continue
+
+    return merged, used
 
 def fetch_stooq_spot():
-    # last quote; wenn das mal ausfällt, geben wir null zurück
     urls = [
         "https://stooq.com/q/l/?s=xauusd&f=sd2t2ohlcv&h&e=csv",
         "https://stooq.pl/q/l/?s=xauusd&f=sd2t2ohlcv&h&e=csv",
     ]
-    def parse(raw):
-        data = raw.decode("utf-8", errors="ignore")
-        rdr = csv.DictReader(io.StringIO(data))
-        row = next(rdr, None)
-        if not row:
-            raise RuntimeError("empty stooq spot")
-        date = row.get("Date") or row.get("date")
-        time_ = row.get("Time") or row.get("time") or "00:00:00"
-        close = row.get("Close") or row.get("close")
-        try:
-            px = float(close)
-        except:
-            px = None
-        ts = f"{date}T{(time_ if time_ and len(time_)==8 else '00:00:00')}Z"
-        return {"timestamp": ts, "XAUUSD": px}
     try:
-        return get_with_retries(urls, parse, retries=3, sleep_s=0.8)
+        data, used_url, _ = try_urls(urls, parse_stooq_spot_csv, retries=3, sleep_s=0.6)
+        data["_source"] = used_url
+        return data
     except Exception:
-        return {"timestamp": dt.datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ"), "XAUUSD": None}
+        # Fallback: Null-Spot, aber gültiger Zeitstempel
+        return {"timestamp": dt.datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ"), "XAUUSD": None, "_source": None}
 
-# ------------- Main -------------
+# ------------------- Main-Pipeline -------------------
 def main():
     os.makedirs(OUT_DIR, exist_ok=True)
 
     today = dt.date.today()
-    start = today - dt.timedelta(days=365*20 + 30)  # ~20y + Puffer
+    start = today - dt.timedelta(days=START_DAYS_BACK)
     start_str = start.isoformat()
 
-    diag = {"start": start_str, "series_counts": {}, "gold_backfill": 0}
+    diag = {
+        "start": start_str,
+        "series_counts": {},
+        "gold_sources": [],
+        "gold_backfill": 0,
+        "gold_valid": 0,
+        "rows": 0,
+        "notes": []
+    }
 
-    # 1) FRED Serien
-    frames = {}
+    # 1) FRED-Serien (tolerant)
+    fred_frames = {}
     for sid in SERIES:
-        try:
-            frames[sid] = fetch_fred_series(sid, start_str)
-        except Exception as e:
-            frames[sid] = {}
-        diag["series_counts"][sid] = len(frames[sid])
+        fred_frames[sid] = fetch_fred_series(sid, start_str)
+        diag["series_counts"][sid] = len(fred_frames[sid])
 
-    # 2) stooq GOLD Historie (Backfill)
-    stq_gold = fetch_stooq_history()
-    diag["gold_backfill"] = len(stq_gold)
+    # 2) GOLD-Historie (stooq) – redundanter Backfill
+    stooq_gold, gold_used_sources = fetch_stooq_gold_history()
+    diag["gold_sources"] = gold_used_sources
+    diag["gold_backfill"] = len(stooq_gold)
 
-    # 3) Unified Date-Set
-    all_dates = set(stq_gold.keys())
-    for sid, m in frames.items():
+    # 3) Datumssuperset
+    all_dates = set(stooq_gold.keys())
+    for sid, m in fred_frames.items():
         all_dates.update(m.keys())
 
     if not all_dates:
-        # Schreibe leere Files, aber klarmachen was los ist
+        # Schreibe leere Dateien + Diag, ohne hart zu scheitern
         with open(HISTORY_PATH, "w", encoding="utf-8") as f:
             json.dump({"history": []}, f, ensure_ascii=False)
         with open(SPOT_PATH, "w", encoding="utf-8") as f:
             json.dump(fetch_stooq_spot(), f, ensure_ascii=False)
         with open(DIAG_PATH, "w", encoding="utf-8") as f:
             json.dump(diag, f, ensure_ascii=False)
-        print("Keine Daten empfangen (FRED/stooq).", file=sys.stderr)
+        print("WARN: Keine Daten empfangen (FRED+stooq beide leer).", file=sys.stderr)
         return
 
-    dates = sorted([d for d in all_dates if d >= start_str])
+    # Relevanter Zeitraum
+    dates = sorted(d for d in all_dates if d >= start_str)
 
-    # 4) Compose rows + Backfill GOLD
+    # 4) Zeilen komponieren (GOLD: FRED → stooq fallback)
     history = []
-    valid_gold = 0
+    gold_valid = 0
     for d in dates:
         row = {"timestamp": d}
-        # GOLD aus FRED, ansonsten stooq
-        v_gold = frames.get("GOLDAMGBD228NLBM", {}).get(d, None)
-        if v_gold is None:
-            v_gold = stq_gold.get(d, None)
-        if isinstance(v_gold, float) and not math.isnan(v_gold):
-            valid_gold += 1
-        row["GOLDAMGBD228NLBM"] = (None if v_gold is None or (isinstance(v_gold,float) and math.isnan(v_gold)) else v_gold)
-        # Rest
+
+        # GOLD
+        g = fred_frames.get("GOLDAMGBD228NLBM", {}).get(d)
+        if g is None:
+            g = stooq_gold.get(d)
+        if isinstance(g, float) and not math.isnan(g):
+            gold_valid += 1
+        row["GOLDAMGBD228NLBM"] = (None if g is None or (isinstance(g, float) and math.isnan(g)) else g)
+
+        # Restliche Serien 1:1 (evtl. None)
         for sid in SERIES:
             if sid == "GOLDAMGBD228NLBM":
                 continue
-            v = frames.get(sid, {}).get(d, None)
-            row[sid] = (None if v is None or (isinstance(v,float) and math.isnan(v)) else v)
+            v = fred_frames.get(sid, {}).get(d)
+            row[sid] = (None if v is None or (isinstance(v, float) and math.isnan(v)) else v)
+
         history.append(row)
 
     # 5) Schreiben
@@ -206,11 +284,31 @@ def main():
         json.dump(spot, f, ensure_ascii=False)
 
     diag["rows"] = len(history)
-    diag["gold_valid"] = valid_gold
+    diag["gold_valid"] = gold_valid
     with open(DIAG_PATH, "w", encoding="utf-8") as f:
         json.dump(diag, f, ensure_ascii=False)
 
-    print(f"Wrote {HISTORY_PATH} ({len(history)} rows, GOLD valid={valid_gold}) • stooq_backfill={len(stq_gold)}", file=sys.stderr)
+    # Konsolenhinweise (für Actions-Logs)
+    print(
+        f"Wrote data: rows={len(history)}, gold_valid={gold_valid}, gold_backfill={len(stooq_gold)}; "
+        f"sources={','.join(gold_used_sources) if gold_used_sources else '—'}",
+        file=sys.stderr
+    )
 
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    except Exception as e:
+        # Failsafe: nie lautlos sterben – schreibe minimaldiagnose
+        try:
+            os.makedirs(OUT_DIR, exist_ok=True)
+            if not os.path.exists(HISTORY_PATH):
+                with open(HISTORY_PATH, "w", encoding="utf-8") as f:
+                    json.dump({"history": []}, f, ensure_ascii=False)
+            if not os.path.exists(SPOT_PATH):
+                with open(SPOT_PATH, "w", encoding="utf-8") as f:
+                    json.dump({"timestamp": dt.datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ"), "XAUUSD": None}, f, ensure_ascii=False)
+            with open(DIAG_PATH, "w", encoding="utf-8") as f:
+                json.dump({"error": str(e)}, f, ensure_ascii=False)
+        finally:
+            raise
