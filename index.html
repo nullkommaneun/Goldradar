@@ -1,0 +1,70 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Gold‑Kauf‑Signal</title>
+<style>
+:root {
+--bg: #0b0f14; --card:#121821; --muted:#9fb0c0; --text:#e6eef5;
+--green:#36c36e; --yellow:#ffcc00; --red:#ff5f56; --neutral:#5b6b7a;
+--accent:#4aa3ff; --border:#1f2a36;
+}
+*{box-sizing:border-box}
+html,body{margin:0;padding:0;background:var(--bg);color:var(--text);font:16px/1.5 system-ui,Segoe UI,Roboto,Arial}
+.wrap{max-width:1100px;margin:0 auto;padding:16px}
+header{display:flex;gap:12px;align-items:center;justify-content:space-between;margin:8px 0 16px}
+.brand{font-weight:700;letter-spacing:.2px}
+.stamp{font-size:.8rem;color:var(--muted)}
+
+
+.ampel{display:flex;gap:10px;align-items:center}
+.lamp{width:18px;height:18px;border-radius:50%;background:var(--neutral);opacity:.45;box-shadow:0 0 0 2px var(--border) inset}
+.lamp.on{opacity:1;box-shadow:0 0 12px currentColor}
+.lamp.green{background:var(--green);color:var(--green)}
+.lamp.yellow{background:var(--yellow);color:var(--yellow)}
+.lamp.red{background:var(--red);color:var(--red)}
+.lamp.neutral{background:var(--neutral);color:var(--neutral)}
+
+
+.pill{padding:6px 10px;border:1px solid var(--border);border-radius:999px;color:var(--muted)}
+
+
+.grid{display:grid;gap:12px}
+@media (min-width:800px){.grid{grid-template-columns:1.2fr 1fr}}
+
+
+.card{background:var(--card);border:1px solid var(--border);border-radius:14px;padding:14px}
+.card h3{margin:0 0 10px;font-size:1rem;color:#dfe8f1}
+.flex{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+
+
+.kpi{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+.kpi .box{background:#0e141d;border:1px solid var(--border);border-radius:10px;padding:10px}
+.kpi .t{font-size:.8rem;color:var(--muted)}
+.kpi .v{font-weight:700}
+
+
+.treiber-list{display:grid;gap:10px}
+.treiber{display:flex;justify-content:space-between;align-items:center;background:#0e141d;border:1px solid var(--border);border-radius:10px;padding:10px}
+.t-left{display:flex;gap:10px;align-items:center}
+.amp{width:10px;height:10px;border-radius:50%}
+.amp.green{background:var(--green)}
+.amp.yellow{background:var(--yellow)}
+.amp.red{background:var(--red)}
+.amp.neutral{background:var(--neutral)}
+.msg{color:var(--muted);font-size:.9rem}
+
+
+.hint{color:var(--muted);font-size:.85rem}
+footer{margin:18px 0;color:var(--muted);font-size:.85rem}
+code.inline{background:#0e141d;border:1px solid var(--border);padding:2px 6px;border-radius:6px}
+</style>
+</head>
+<body>
+<div class="wrap">
+<header>
+<div class="brand">Gold‑Kauf‑Signal</div>
+<div class="flex">
+<div id="spot" class="pill">Spot: —</div>
+</html>
