@@ -1,78 +1,350 @@
 <!doctype html>
 <html lang="de">
 <head>
-<meta charset="utf-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>Gold‑Kauf‑Signal</title>
-<style>
-:root {
---bg: #0b0f14; --card:#121821; --muted:#9fb0c0; --text:#e6eef5;
---green:#36c36e; --yellow:#ffcc00; --red:#ff5f56; --neutral:#5b6b7a;
---accent:#4aa3ff; --border:#1f2a36;
-}
-*{box-sizing:border-box}
-html,body{margin:0;padding:0;background:var(--bg);color:var(--text);font:16px/1.5 system-ui,Segoe UI,Roboto,Arial}
-.wrap{max-width:1100px;margin:0 auto;padding:16px}
-header{display:flex;gap:12px;align-items:center;justify-content:space-between;margin:8px 0 16px}
-.brand{font-weight:700;letter-spacing:.2px}
-.stamp{font-size:.8rem;color:var(--muted)}
-
-
-.ampel{display:flex;gap:10px;align-items:center}
-.lamp{width:18px;height:18px;border-radius:50%;background:var(--neutral);opacity:.45;box-shadow:0 0 0 2px var(--border) inset}
-.lamp.on{opacity:1;box-shadow:0 0 12px currentColor}
-.lamp.green{background:var(--green);color:var(--green)}
-.lamp.yellow{background:var(--yellow);color:var(--yellow)}
-.lamp.red{background:var(--red);color:var(--red)}
-.lamp.neutral{background:var(--neutral);color:var(--neutral)}
-
-
-.pill{padding:6px 10px;border:1px solid var(--border);border-radius:999px;color:var(--muted)}
-
-
-.grid{display:grid;gap:12px}
-@media (min-width:800px){.grid{grid-template-columns:1.2fr 1fr}}
-
-
-.card{background:var(--card);border:1px solid var(--border);border-radius:14px;padding:14px}
-.card h3{margin:0 0 10px;font-size:1rem;color:#dfe8f1}
-.flex{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
-
-
-.kpi{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
-.kpi .box{background:#0e141d;border:1px solid var(--border);border-radius:10px;padding:10px}
-.kpi .t{font-size:.8rem;color:var(--muted)}
-.kpi .v{font-weight:700}
-
-
-.treiber-list{display:grid;gap:10px}
-.treiber{display:flex;justify-content:space-between;align-items:center;background:#0e141d;border:1px solid var(--border);border-radius:10px;padding:10px}
-.t-left{display:flex;gap:10px;align-items:center}
-.amp{width:10px;height:10px;border-radius:50%}
-.amp.green{background:var(--green)}
-.amp.yellow{background:var(--yellow)}
-.amp.red{background:var(--red)}
-.amp.neutral{background:var(--neutral)}
-.msg{color:var(--muted);font-size:.9rem}
-
-
-.hint{color:var(--muted);font-size:.85rem}
-footer{margin:18px 0;color:var(--muted);font-size:.85rem}
-code.inline{background:#0e141d;border:1px solid var(--border);padding:2px 6px;border-radius:6px}
-</style>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Gold-Kauf-Signal</title>
+  <style>
+    :root{--bg:#0b0f12;--card:#10161a;--ink:#e7edf2;--muted:#98a2ad;--ok:#1dd18a;--warn:#ffcc47;--bad:#ff5a63;--neu:#596573;--accent:#55b5ff}
+    *{box-sizing:border-box} body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.5 system-ui,Segoe UI,Roboto,Helvetica,Arial}
+    header{position:sticky;top:0;background:rgba(11,15,18,.85);backdrop-filter:blur(6px);border-bottom:1px solid #162028;z-index:5}
+    .wrap{max-width:1000px;margin:0 auto;padding:16px}
+    .grid{display:grid;gap:16px}
+    @media(min-width:880px){.grid{grid-template-columns:1fr 1fr}}
+    .card{background:var(--card);border:1px solid #162028;border-radius:14px;padding:16px}
+    .title{font-weight:700;margin:0 0 8px}
+    .muted{color:var(--muted);font-size:.9rem}
+    .ampel{display:flex;gap:8px;align-items:center}
+    .dot{width:14px;height:14px;border-radius:50%}
+    .dot.green{background:var(--ok)} .dot.yellow{background:var(--warn)} .dot.red{background:var(--bad)} .dot.neutral{background:var(--neu)}
+    .kpi{display:flex;justify-content:space-between;align-items:baseline;margin:6px 0}
+    .kpi span:last-child{font-variant-numeric:tabular-nums}
+    .pill{display:inline-block;padding:2px 8px;border-radius:999px;border:1px solid #22313b;color:var(--muted);font-size:.85rem}
+    .list{display:grid;gap:8px}
+    .driver{display:flex;justify-content:space-between;gap:8px;align-items:center;padding:10px;border:1px solid #162028;border-radius:10px;background:#0e1317}
+    .driver .msg{font-size:.95rem}
+    .band{font-size:.9rem;color:var(--muted)}
+    .footer{color:var(--muted);font-size:.85rem;margin-top:8px}
+    .hint{border-left:3px solid var(--neu);padding-left:10px;margin-top:8px}
+    .rec{font-size:1.05rem}
+    .badge{padding:2px 8px;border-radius:8px;border:1px solid #22313b}
+    .badge.green{border-color:var(--ok);color:var(--ok)}
+    .badge.yellow{border-color:var(--warn);color:var(--warn)}
+    .badge.red{border-color:var(--bad);color:var(--bad)}
+    .badge.neutral{color:var(--muted);border-color:#22313b}
+  </style>
 </head>
 <body>
-<div class="wrap">
-<header>
-<div class="brand">Gold‑Kauf‑Signal</div>
-<div class="flex">
-<div id="spot" class="pill">Spot: —</div>
-<div class="stamp" id="stamp">Letzte Daten: —</div>
-</div>
-</header>
+  <header>
+    <div class="wrap">
+      <div class="ampel" id="top-signal">
+        <div class="dot neutral" id="sig-dot"></div>
+        <h1 style="margin:0;font-size:1.1rem;">Gold-Kauf-Signal</h1>
+        <span class="pill" id="sig-text">Lade Daten …</span>
+      </div>
+    </div>
+  </header>
 
+  <main class="wrap">
+    <div class="grid">
+      <section class="card">
+        <h2 class="title">Wohin geht Gold?</h2>
+        <div class="muted" id="spotline">Spot: —</div>
+        <div class="list" id="forecast"></div>
+        <div class="footer band" id="trendnote">Berechnung: 60-Tage-Trend (log-Returns) mit Unsicherheitsband.</div>
+      </section>
 
-<div class="card">
-<div class="flex" style="justify-content:space-between">
-<div class="flex" style="gap:12px">
+      <section class="card">
+        <h2 class="title">Warum heute?</h2>
+        <div class="list" id="drivers"></div>
+        <div class="hint" id="drivers-sum">In Summe: —</div>
+      </section>
+
+      <section class="card" style="grid-column:1/-1;">
+        <h2 class="title">Historischer Vergleich</h2>
+        <div id="analogs" class="list"></div>
+        <div class="footer">Methode: Cosine-Similarity über Treibervektor (normiert).</div>
+      </section>
+
+      <section class="card" style="grid-column:1/-1;">
+        <h2 class="title">System</h2>
+        <div class="muted" id="sys-status">Letztes Update: — • Datenquelle: FRED, stooq</div>
+      </section>
+    </div>
+  </main>
+
+  <script>
+    // ---- Utility
+    const clamp = (x,min,max)=>Math.min(max,Math.max(min,x));
+    const pct = v => (isFinite(v)? (v>=0? '+' : '') + (100*v).toFixed(1)+'%' : '—');
+    const daysBetween = (a,b)=> Math.round((b-a)/(1000*60*60*24));
+    const amp = s => ({status:s, dotClass:`dot ${s}`, badge:`badge ${s}`});
+
+    // ---- Config
+    const SERIES = ["GOLDAMGBD228NLBM","DFII10","DTWEXBGS","VIXCLS","DCOILBRENTEU","T10YIE","BAMLH0A0HYM2","NAPM","RECPROUSM156N","T10Y2Y"];
+
+    // Driver rules -> status + message
+    function assessDrivers(t){
+      // t = latest row with numeric or null
+      const def = (val, betterLow) => {
+        if(val==null) return {status:"neutral", msg:"Neutral (keine Daten)"};
+        if(betterLow){ // niedriger ist gut für Gold
+          if(val<=0) return {status:"green", msg:"Gut für deinen Goldpreis"};
+          if(val<1)  return {status:"yellow", msg:"Eher neutral"};
+          return {status:"red", msg:"Schlecht für deinen Goldpreis"};
+        } else { // höher ist gut
+          if(val>=0) return {status:"green", msg:"Gut für deinen Goldpreis"};
+          if(val>-1) return {status:"yellow", msg:"Eher neutral"};
+          return {status:"red", msg:"Schlecht für deinen Goldpreis"};
+        }
+      };
+      // Heuristik: DFII10, DTWEXBGS, T10Y2Y -> niedriger gut; VIX, T10YIE, HY, Rezessionsrisiko -> höher gut; Öl ambivalent (Inflationstreiber), PMI höher schlecht
+      const m = {};
+      m.DFII10 = def(t.DFII10, true);
+      m.DTWEXBGS= def(t.DTWEXBGS, true);
+      m.VIXCLS  = def(t.VIXCLS, false);
+      m.DCOILBRENTEU = def(-t.DCOILBRENTEU, true); // steigendes Öl = Inflationsdruck -> pro Gold → invertieren
+      m.T10YIE  = def(t.T10YIE, false);
+      m.BAMLH0A0HYM2 = def(t.BAMLH0A0HYM2, false);
+      m.NAPM    = def(-t.NAPM, true); // schwächerer PMI -> pro Gold
+      m.RECPROUSM156N = def(t.RECPROUSM156N, false);
+      m.T10Y2Y  = def(-t.T10Y2Y, true); // Inversion pro Gold
+      return m;
+    }
+
+    function summarize(drvs){
+      const scoreMap={green:2,yellow:1,red:-2,neutral:0};
+      let s=0, n=0;
+      for(const k in drvs){ s += scoreMap[drvs[k].status]; n++; }
+      const avg = s/Math.max(1,n);
+      if(avg>=1) return {overall:"green", text:"In Summe eher positiv."};
+      if(avg<=-1) return {overall:"red", text:"In Summe eher negativ."};
+      return {overall:"yellow", text:"In Summe eher neutral."};
+    }
+
+    function recommendation(overall, momentum){
+      // combine driver summary + price momentum
+      const score = (overall==="green"?2:overall==="yellow"?0:overall==="red"?-2:0) + (momentum>=0?1:-1);
+      if(score>=2) return {status:"green", text:"Kaufen"};
+      if(score<=-2) return {status:"red", text:"Nicht kaufen"};
+      return {status:"yellow", text:"Abwarten"};
+    }
+
+    // Forecast via 60-day log-return trend with simple variance band
+    function forecast(series, horizonDays){
+      // series: [{date, price}] descending or ascending OK
+      if(series.length<90) return {median:null, lo:null, hi:null};
+      const sorted=[...series].sort((a,b)=>new Date(a.date)-new Date(b.date));
+      const px = sorted.map(d=>d.price).filter(v=>isFinite(v));
+      const logR=[];
+      for(let i=1;i<px.length;i++) logR.push(Math.log(px[i]/px[i-1]));
+      const w = 60;
+      const tail = logR.slice(-w);
+      const mu = tail.reduce((a,b)=>a+b,0)/Math.max(1,tail.length);
+      const sigma = Math.sqrt(tail.reduce((a,b)=>a+(b-mu)*(b-mu),0)/Math.max(1,tail.length));
+      const last = px[px.length-1];
+      const steps = Math.max(1,Math.round(horizonDays)); // daily
+      const med = last * Math.exp(mu*steps);
+      const lo  = last * Math.exp((mu-1.64*sigma)*steps);
+      const hi  = last * Math.exp((mu+1.64*sigma)*steps);
+      return {median:med, lo, hi, mu, sigma};
+    }
+
+    // Cosine similarity over driver vector
+    function cosine(a,b){
+      let num=0,na=0,nb=0, c=0;
+      for(const k of Object.keys(a)){
+        const va=a[k], vb=b[k];
+        if(va==null || vb==null) continue;
+        num += va*vb; na += va*va; nb += vb*vb; c++;
+      }
+      if(c===0) return -1;
+      return num/(Math.sqrt(na)*Math.sqrt(nb));
+    }
+
+    // Build driver vector of standardized z-scores over short window deltas
+    function buildDriverVector(row, refMeans){
+      // row: object of latest drivers already standardized-ish; we’ll pass day-over-day deltas precomputed
+      const out={};
+      for(const k of SERIES.filter(s=>s!=="GOLDAMGBD228NLBM")){
+        const v = row[k];
+        out[k] = (v==null? null : (v - (refMeans[k]?.mean||0)) / ((refMeans[k]?.std||1e-9)));
+      }
+      return out;
+    }
+
+    // ---- App
+    (async function(){
+      // Load JSONs
+      const [hist, spot] = await Promise.all([
+        fetch('data/history.json',{cache:'no-store'}).then(r=>r.json()).catch(()=>({history:[]})),
+        fetch('data/spot.json',{cache:'no-store'}).then(r=>r.json()).catch(()=>({XAUUSD:null,timestamp:null}))
+      ]);
+
+      // Prepare time series maps
+      const rows = (hist.history||[]).map(r=>({
+        date: r.timestamp,
+        GOLD:r.GOLDAMGBD228NLBM??null,
+        DFII10:r.DFII10??null, DTWEXBGS:r.DTWEXBGS??null, VIXCLS:r.VIXCLS??null, DCOILBRENTEU:r.DCOILBRENTEU??null,
+        T10YIE:r.T10YIE??null, BAMLH0A0HYM2:r.BAMLH0A0HYM2??null, NAPM:r.NAPM??null, RECPROUSM156N:r.RECPROUSM156N??null, T10Y2Y:r.T10Y2Y??null
+      })).sort((a,b)=> new Date(a.date)-new Date(b.date));
+
+      const latest = rows[rows.length-1]||{};
+      const goldSeries = rows.filter(r=>isFinite(r.GOLD)).map(r=>({date:r.date, price:r.GOLD}));
+
+      // Momentum (last 10 trading days)
+      let momentum=0;
+      if(goldSeries.length>10){
+        const last=goldSeries[goldSeries.length-1].price;
+        const prev=goldSeries[goldSeries.length-11].price;
+        momentum = Math.log(last/prev)/10; // avg daily log-return
+      }
+
+      // Short-window deltas for drivers (10d diff, normalized by abs level to be scale-robust)
+      function shortDelta(arr, key){
+        const list = arr.map(r=> ({d:r.date, v:r[key]})).filter(x=>isFinite(x.v));
+        if(list.length<11) return null;
+        const vN = list[list.length-1].v, vP = list[list.length-11].v;
+        if(!isFinite(vN) || !isFinite(vP)) return null;
+        const base = Math.max(1e-9, Math.abs(vP));
+        return (vN - vP)/base; // relative change
+      }
+      const latestDelta = {
+        DFII10: shortDelta(rows,'DFII10'),
+        DTWEXBGS: shortDelta(rows,'DTWEXBGS'),
+        VIXCLS: shortDelta(rows,'VIXCLS'),
+        DCOILBRENTEU: shortDelta(rows,'DCOILBRENTEU'),
+        T10YIE: shortDelta(rows,'T10YIE'),
+        BAMLH0A0HYM2: shortDelta(rows,'BAMLH0A0HYM2'),
+        NAPM: shortDelta(rows,'NAPM'),
+        RECPROUSM156N: shortDelta(rows,'RECPROUSM156N'),
+        T10Y2Y: shortDelta(rows,'T10Y2Y')
+      };
+
+      // Assess drivers
+      const drvAssess = assessDrivers(latestDelta);
+      // Render drivers
+      const driverLabels = {
+        DFII10:"Realzinsen (Zinskosten)",
+        DTWEXBGS:"US-Dollar (Dollar-Stärke)",
+        VIXCLS:"VIX (Marktstress)",
+        DCOILBRENTEU:"Ölpreis (Inflationstreiber)",
+        T10YIE:"Inflationserwartung",
+        BAMLH0A0HYM2:"HY-Spreads",
+        NAPM:"PMI",
+        RECPROUSM156N:"Rezessionsrisiko",
+        T10Y2Y:"Zinskurve 10y–2y"
+      };
+      const $drv = document.getElementById('drivers');
+      Object.keys(driverLabels).forEach(k=>{
+        const a = drvAssess[k]||{status:"neutral",msg:"Neutral"};
+        const el=document.createElement('div');
+        el.className='driver';
+        el.innerHTML = `
+          <div class="ampel"><div class="dot ${a.status}"></div><div class="msg"><strong>${driverLabels[k]}</strong><br><span class="muted">${a.msg}</span></div></div>
+          <div class="pill">${isFinite(latestDelta[k])? (latestDelta[k]>=0? '+' : '')+(100*latestDelta[k]).toFixed(1)+'%/10T' : '—'}</div>`;
+        $drv.appendChild(el);
+      });
+
+      const sum = summarize(drvAssess);
+      document.getElementById('drivers-sum').textContent = `In Summe: ${sum.text}`;
+
+      // Top recommendation
+      const rec = recommendation(sum.overall, momentum);
+      document.getElementById('sig-dot').className = `dot ${rec.status}`;
+      document.getElementById('sig-text').textContent = (rec.text||'—');
+
+      // Spot status
+      const spotTs = spot.timestamp? new Date(spot.timestamp):null;
+      const spotAge = (spotTs? daysBetween(spotTs, new Date()) : null);
+      const spotStr = (spot.XAUUSD!=null ? spot.XAUUSD.toFixed(2)+' USD/oz' : '—');
+      document.getElementById('spotline').textContent = `Spot: ${spotStr}`
+
+      // Forecasts
+      const horizons=[30,90,180];
+      const $fc = document.getElementById('forecast');
+      horizons.forEach(h=>{
+        const f = forecast(goldSeries, h);
+        const pctMed = (f.median && goldSeries.length? (f.median/goldSeries[goldSeries.length-1].price - 1) : null);
+        const status = (!isFinite(pctMed)? 'neutral' : pctMed>0.02? 'green' : pctMed<-0.02? 'red' : 'yellow');
+        const wrap = document.createElement('div');
+        wrap.className='kpi';
+        wrap.innerHTML = `
+          <span>${h} Tage</span>
+          <span><span class="${'badge '+status}">${isFinite(pctMed)? pct(pctMed):'—'}</span> <span class="band">[${isFinite(f.lo)? (100*(f.lo/f.median-1)).toFixed(1)+'%, ': '—, '} ${isFinite(f.hi)? (100*(f.hi/f.median-1)).toFixed(1)+'%]':'—]'} </span></span>`;
+        $fc.appendChild(wrap);
+      });
+
+      // Historical analogs (last 20y; take a few top matches)
+      // Build reference z-scores over rolling window
+      const deltas = rows.map(r=>{
+        const d = {timestamp:r.date};
+        for(const k of Object.keys(latestDelta)) d[k]=null;
+        return d;
+      });
+      // fill 10d relative deltas
+      for(let i=10;i<rows.length;i++){
+        const win0 = rows[i-10], winN = rows[i];
+        for(const k of Object.keys(latestDelta)){
+          const vN = winN[k], v0 = win0[k];
+          d = deltas[i];
+          if(isFinite(vN)&&isFinite(v0)&&Math.abs(v0)>1e-9){
+            d[k]=(vN-v0)/Math.abs(v0);
+          }
+        }
+      }
+      // compute means/stds
+      const refStats={};
+      for(const k of Object.keys(latestDelta)){
+        const vals = deltas.map(d=>d[k]).filter(v=>isFinite(v));
+        const m = vals.reduce((a,b)=>a+b,0)/(vals.length||1);
+        const s = Math.sqrt(vals.reduce((a,b)=>a+(b-m)*(b-m),0)/(vals.length||1))||1e-9;
+        refStats[k]={mean:m,std:s};
+      }
+      const currentVec = buildDriverVector(latestDelta, refStats);
+      // candidate dates excluding most recent 60d to avoid leakage
+      const cutoff = rows.length-60;
+      const scored=[];
+      for(let i=20;i<cutoff;i++){
+        const vec={};
+        for(const k of Object.keys(latestDelta)){
+          vec[k]=deltas[i][k]==null? null : (deltas[i][k]-refStats[k].mean)/refStats[k].std;
+        }
+        const sim = cosine(currentVec, vec);
+        if(sim>0.6) scored.push({i, sim, date: rows[i].date});
+      }
+      scored.sort((a,b)=>b.sim - a.sim);
+      const top = scored.slice(0,3);
+      const $an = document.getElementById('analogs');
+      if(top.length===0){
+        const p=document.createElement('div'); p.className='muted'; p.textContent='Keine gut passenden Analogien gefunden.';
+        $an.appendChild(p);
+      } else {
+        top.forEach(hit=>{
+          // compute forward 90d perf from that date
+          const baseIdx = goldSeries.findIndex(g=>g.date>=hit.date);
+          let perf='—';
+          if(baseIdx>=0 && baseIdx+90<goldSeries.length){
+            const r = goldSeries[baseIdx], f = goldSeries[baseIdx+90];
+            perf = ((f.price/r.price - 1)*100).toFixed(1)+'%';
+          }
+          const div=document.createElement('div'); div.className='driver';
+          div.innerHTML=`<div><strong>Ähnlich zu ${new Date(hit.date).toLocaleDateString('de-DE',{year:'numeric',month:'long'})}</strong><div class="muted">Ähnlichkeit: ${(100*hit.sim).toFixed(0)}%</div></div><div class="pill">90-Tage: ${perf}</div>`;
+          $an.appendChild(div);
+        });
+      }
+
+      // System status
+      const lastHist = rows.length? rows[rows.length-1].date : null;
+      const lastSpot = spotTs? spotTs.toISOString().slice(0,19).replace('T',' ')+'Z' : '—';
+      let sys = `Letztes History-Datum: ${lastHist||'—'} • Spot: ${lastSpot}`;
+      if(spotTs && daysBetween(spotTs, new Date())>1) sys += ' • Hinweis: Spot älter als 24h';
+      document.getElementById('sys-status').textContent = sys;
+
+      // Trend note
+      document.getElementById('trendnote').textContent = 'Berechnung: 60-Tage-Trend (log-Returns) mit 90%-Band (±1.64σ).';
+
+    })();
+  </script>
+</body>
 </html>
