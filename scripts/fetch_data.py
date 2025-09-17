@@ -1,12 +1,4 @@
 #!/usr/bin/env python3
-# Tages‑CSV; wir nehmen den letzten Schlusskurs
-url = "https://stooq.com/q/d/l/?s=xauusd&i=d"
-r = requests.get(url, timeout=30)
-r.raise_for_status()
-text = r.text.strip()
-reader = csv.DictReader(io.StringIO(text))
-rows = list(reader)
-if not rows:
 return None
 last = rows[-1]
 close = last.get("Close") or last.get("close")
