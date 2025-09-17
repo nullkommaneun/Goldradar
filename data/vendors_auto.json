@@ -1,5 +1,5 @@
 {
-  "generated": "2025-09-17T22:20:49Z",
+  "generated": "2025-09-17T23:05:53Z",
   "fx": {
     "EURUSD": 1.08
   },
@@ -24,12 +24,17 @@
       "domain": "heubach-edelmetalle.de",
       "trust": 90,
       "items": []
+    },
+    {
+      "domain": "philoro.de",
+      "trust": 95,
+      "items": []
     }
   ],
   "diagnostics": {
     "totals": {
-      "domains": 3,
-      "pages": 130,
+      "domains": 4,
+      "pages": 161,
       "products": 0,
       "offers": 0,
       "items": 0
@@ -45,7 +50,7 @@
       },
       {
         "domain": "degussa-goldhandel.de",
-        "pages": 120,
+        "pages": 150,
         "products": 0,
         "offers": 0,
         "items": 0,
@@ -53,7 +58,15 @@
       },
       {
         "domain": "heubach-edelmetalle.de",
-        "pages": 10,
+        "pages": 11,
+        "products": 0,
+        "offers": 0,
+        "items": 0,
+        "notes": []
+      },
+      {
+        "domain": "philoro.de",
+        "pages": 0,
         "products": 0,
         "offers": 0,
         "items": 0,
