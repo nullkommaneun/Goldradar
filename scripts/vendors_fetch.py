@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """
 Vollautomatischer Vendor-Fetch (mit Diagnostics):
-- robots.txt (urllib.robotparser)
+- robots.txt (stdlib)
 - strukturierte Daten: JSON-LD, Microdata, RDFa (extruct)
-- Produktseiten via Sitemaps + Kategorieseiten (Produktlinks)
+- Produktseiten via Sitemaps + Kategorieseiten + Domain-Seeds
 - Standardprodukte klassifizieren
 - Premium ggü. Spot (USD/kg) + ECB EURUSD
 - schreibt data/vendors_auto.json inkl. diagnostics
@@ -12,7 +12,7 @@ Vollautomatischer Vendor-Fetch (mit Diagnostics):
 from __future__ import annotations
 import json, re, time, sys
 from pathlib import Path
-from urllib.parse import urlparse, urljoin
+from urllib.parse import urlparse
 import urllib.robotparser as robotparser
 
 import httpx
@@ -24,11 +24,25 @@ ROOT = Path(__file__).resolve().parents[1]
 DATA_DIR = ROOT / "data"
 DATA_DIR.mkdir(parents=True, exist_ok=True)
 
+# -----------------------------------------------------------------------------
+# Whitelist seriöser Domains
+# -----------------------------------------------------------------------------
 WHITELIST = [
     "proaurum.de",
     "degussa-goldhandel.de",
     "heubach-edelmetalle.de",
+    "philoro.de",  # NEU
 ]
+
+# Domain-spezifische Start-URLs (Categories), um schnell Produktseiten zu finden
+DOMAIN_SEEDS: dict[str, list[str]] = {
+    "philoro.de": [
+        "https://philoro.de/shop/goldbarren",
+        "https://philoro.de/shop/goldmuenzen-krugerrand",
+        "https://philoro.de/shop/goldbarren-100g",
+    ],
+    # Optional weitere Seeds für andere Domains hier ergänzen
+}
 
 HEADERS = {
     "User-Agent": "GoldKaufSignalBot (+https://github.com/%s)" % (sys.argv[0] or "repo")
@@ -38,11 +52,13 @@ OZ_TO_G = 31.1034768
 USD_PER_EUR_DEFAULT = 1.08
 HTTP_TIMEOUT = 20.0
 
-MAX_URLS_PER_DOMAIN = 120
+MAX_URLS_PER_DOMAIN = 150   # Seeds + Sitemap kombinieren
 MAX_SITEMAPS = 8
 REQ_DELAY = 1.0  # s
 
-# ----------------- Fetch helpers -----------------
+# -----------------------------------------------------------------------------
+# Fetch helpers
+# -----------------------------------------------------------------------------
 def fetch(client: httpx.Client, url: str) -> httpx.Response | None:
     try:
         return client.get(url, timeout=HTTP_TIMEOUT, headers=HEADERS, follow_redirects=True)
@@ -74,7 +90,9 @@ def get_spot_usd_per_kg() -> float | None:
     except Exception:
         return None
 
-# ----------------- robots.txt -----------------
+# -----------------------------------------------------------------------------
+# robots.txt
+# -----------------------------------------------------------------------------
 _robots_cache: dict[str, robotparser.RobotFileParser] = {}
 def robots_ok(domain: str, url: str) -> bool:
     try:
@@ -86,14 +104,24 @@ def robots_ok(domain: str, url: str) -> bool:
                 rp.read()
             except Exception:
                 _robots_cache[domain] = rp
+                # konservativ erlauben, außer Admin-Bereiche
                 return not any(seg in url for seg in ("/wp-admin", "/admin", "/cart"))
             _robots_cache[domain] = rp
         return rp.can_fetch(HEADERS["User-Agent"], url)
     except Exception:
         return True
 
-# ----------------- Discovery -----------------
-KW_PATH = ("gold", "barren", "bar", "maple", "kruger", "krügerrand", "coin", "unze", "1oz", "100g", "100-g", "1-oz")
+# -----------------------------------------------------------------------------
+# Discovery
+# -----------------------------------------------------------------------------
+KW_PATH = (
+    "gold", "goldmuenzen", "goldbarren",  # Ergänzung: goldmuenzen
+    "barren", "bar",
+    "muenze", "münze",
+    "maple", "kruger", "krügerrand", "kruegerrand",
+    "coin", "unze", "1oz", "100g", "100-g", "1-oz"
+)
+
 def looks_product_path(path: str) -> bool:
     p = path.lower()
     return any(k in p for k in KW_PATH)
@@ -145,7 +173,25 @@ def extract_links_from_page(base_url: str, r: httpx.Response) -> list[str]:
     return out
 
 def find_candidate_urls(client: httpx.Client, domain: str) -> list[str]:
-    urls = set(discover_from_sitemaps(client, domain))
+    urls = set()
+
+    # 1) Seeds (falls vorhanden)
+    for seed in DOMAIN_SEEDS.get(domain, []):
+        if len(urls) >= MAX_URLS_PER_DOMAIN: break
+        if not robots_ok(domain, seed): continue
+        r = fetch(client, seed); time.sleep(REQ_DELAY)
+        if r and r.status_code==200:
+            for u in extract_links_from_page(seed, r):
+                urls.add(u)
+                if len(urls) >= MAX_URLS_PER_DOMAIN: break
+
+    # 2) Sitemaps
+    if len(urls) < MAX_URLS_PER_DOMAIN:
+        for u in discover_from_sitemaps(client, domain):
+            urls.add(u)
+            if len(urls) >= MAX_URLS_PER_DOMAIN: break
+
+    # 3) Home-Fallback
     if len(urls) < 10:
         home = f"https://{domain}/"
         if robots_ok(domain, home):
@@ -154,9 +200,12 @@ def find_candidate_urls(client: httpx.Client, domain: str) -> list[str]:
                 for u in extract_links_from_page(home, r):
                     urls.add(u)
                     if len(urls) >= MAX_URLS_PER_DOMAIN: break
+
     return list(urls)[:MAX_URLS_PER_DOMAIN]
 
-# ----------------- Structured Data -----------------
+# -----------------------------------------------------------------------------
+# Structured Data
+# -----------------------------------------------------------------------------
 def parse_structured(html_bytes: bytes, base_url: str) -> dict:
     data = {"products":[]}
     try:
@@ -171,6 +220,7 @@ def parse_structured(html_bytes: bytes, base_url: str) -> dict:
         except Exception:
             ext = {}
 
+    # JSON-LD
     for node in ext.get("json-ld", []) or []:
         if isinstance(node, dict):
             types = node.get("@type")
@@ -184,6 +234,7 @@ def parse_structured(html_bytes: bytes, base_url: str) -> dict:
                     if isinstance(u,str):
                         data.setdefault("links",[]).append(u)
 
+    # Microdata / RDFa zu Product vereinheitlichen
     for syntax in ("microdata","rdfa"):
         for node in ext.get(syntax, []) or []:
             try:
@@ -206,7 +257,9 @@ def parse_structured(html_bytes: bytes, base_url: str) -> dict:
 
     return data
 
-# ----------------- Normalisierung -----------------
+# -----------------------------------------------------------------------------
+# Normalisierung
+# -----------------------------------------------------------------------------
 def as_float(x):
     try:
         if isinstance(x, str):
@@ -241,10 +294,10 @@ def classify_product(name: str, weight_g: float | None) -> str | None:
             if any(k in n for k in ("barren", "bar", "cast", "linge", "tafel")): return "bar-100g"
         if 30 <= weight_g <= 32.5:
             if "maple" in n: return "coin-1oz-maple"
-            if "kruger" in n or "krügerrand" in n: return "coin-1oz-krugerrand"
-            if any(k in n for k in ("unze","oz","coin","münze")): return "coin-1oz"
+            if "kruger" in n or "krügerrand" in n or "kruegerrand" in n: return "coin-1oz-krugerrand"
+            if any(k in n for k in ("unze","oz","coin","münze","muenze")): return "coin-1oz"
     if "maple" in n: return "coin-1oz-maple"
-    if "kruger" in n or "krügerrand" in n: return "coin-1oz-krugerrand"
+    if "kruger" in n or "krügerrand" in n or "kruegerrand" in n: return "coin-1oz-krugerrand"
     return None
 
 def normalize_offer(offer) -> dict | None:
@@ -273,7 +326,9 @@ def best_offer(prod: dict) -> dict | None:
     if not cands: return None
     return sorted(cands, key=lambda x: x["price"])[0]
 
-# ----------------- Main -----------------
+# -----------------------------------------------------------------------------
+# Main
+# -----------------------------------------------------------------------------
 def main():
     out = {
         "generated": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
@@ -302,7 +357,7 @@ def main():
             out["diagnostics"]["domains"].append(dstat)
             out["diagnostics"]["totals"]["domains"] += 1
 
-            vendor = {"domain": domain, "trust": 90, "items": []}
+            vendor = {"domain": domain, "trust": 95 if domain == "philoro.de" else 90, "items": []}
             urls = find_candidate_urls(client, domain)
             seen = set()
 
@@ -311,12 +366,12 @@ def main():
                 if pu.netloc and not pu.netloc.endswith(domain): continue
                 if u in seen: continue
                 seen.add(u)
-                if not robots_ok(domain, u): 
+                if not robots_ok(domain, u):
                     dstat["notes"].append(f"blocked robots: {u}")
                     continue
 
                 r = fetch(client, u); time.sleep(REQ_DELAY)
-                if not r or r.status_code != 200 or not r.content: 
+                if not r or r.status_code != 200 or not r.content:
                     dstat["notes"].append(f"bad status: {u} ({getattr(r,'status_code',None)})")
                     continue
                 dstat["pages"] += 1
@@ -394,5 +449,6 @@ def main():
     (DATA_DIR / "vendors_auto.json").write_text(json.dumps(out, ensure_ascii=False, indent=2), encoding="utf-8")
     print("Wrote data/vendors_auto.json with", len(out["vendors"]), "vendors")
     print("Diagnostics:", json.dumps(out["diagnostics"], ensure_ascii=False))
+
 if __name__ == "__main__":
     main()
