@@ -226,3 +226,44 @@ body:not(.is-loading) .skeleton { display: none; }
 }
 
 /* Skeletons usw. bleiben wie in deiner aktuellen Datei */
+
+/* … dein vorhandenes CSS bleibt bestehen … */
+
+/* Select */
+.select{
+  width:100%;
+  background:#0e1317;
+  color:var(--ink);
+  border:1px solid var(--line);
+  border-radius:10px;
+  min-height:44px;
+  padding:0 var(--space-2);
+  font-size:var(--fs-md);
+}
+
+/* Vendor-Liste */
+.vendor-toolbar{
+  display:grid; grid-template-columns: 1fr 1fr; gap:var(--space-2);
+  margin-bottom: var(--space-2);
+}
+.vendors-list{
+  display:grid; gap: var(--space-2);
+}
+.vendor-card{
+  display:flex; justify-content:space-between; align-items:center;
+  gap: var(--space-2);
+  padding: var(--space-2);
+  border:1px solid var(--line);
+  background:#0e1317; border-radius:10px;
+}
+.vendor-card .info-line{ color:var(--muted); font-size: var(--fs-sm); }
+.vendor-actions{display:flex; gap: 8px; align-items:center}
+.btn{
+  display:inline-flex; align-items:center; justify-content:center;
+  min-height:36px; padding:0 12px; border-radius:10px; border:1px solid #21303a;
+  color:var(--ink); background:#0f161b; text-decoration:none;
+}
+.btn:hover{ text-decoration:none; background:#12202a; }
+.prem.green{ color: var(--ok); border-color: var(--ok); }
+.prem.yellow{ color: var(--warn); border-color: var(--warn); }
+.prem.red{ color: var(--bad); border-color: var(--bad); }
