@@ -1,46 +1,17 @@
 <!doctype html>
 <html lang="de">
 <head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
   <title>Gold-Kauf-Signal</title>
-  <style>
-    :root{--bg:#0b0f12;--card:#10161a;--ink:#e7edf2;--muted:#98a2ad;--ok:#1dd18a;--warn:#ffcc47;--bad:#ff5a63;--neu:#596573;--accent:#55b5ff}
-    *{box-sizing:border-box}
-    body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.5 system-ui,Segoe UI,Roboto,Helvetica,Arial}
-    header{position:sticky;top:0;background:rgba(11,15,18,.85);backdrop-filter:blur(6px);border-bottom:1px solid #162028;z-index:5}
-    .wrap{max-width:1000px;margin:0 auto;padding:16px}
-    .grid{display:grid;gap:16px}
-    @media(min-width:880px){.grid{grid-template-columns:1fr 1fr}}
-    .card{background:var(--card);border:1px solid #162028;border-radius:14px;padding:16px}
-    .title{font-weight:700;margin:0 0 8px}
-    .muted{color:var(--muted);font-size:.9rem}
-    .ampel{display:flex;gap:8px;align-items:center}
-    .dot{width:14px;height:14px;border-radius:50%}
-    .dot.green{background:var(--ok)} .dot.yellow{background:var(--warn)} .dot.red{background:var(--bad)} .dot.neutral{background:var(--neu)}
-    .kpi{display:flex;justify-content:space-between;align-items:baseline;margin:6px 0}
-    .kpi span:last-child{font-variant-numeric:tabular-nums}
-    .pill{display:inline-block;padding:2px 8px;border-radius:999px;border:1px solid #22313b;color:var(--muted);font-size:.85rem}
-    .list{display:grid;gap:8px}
-    .driver{display:flex;justify-content:space-between;gap:8px;align-items:center;padding:10px;border:1px solid #162028;border-radius:10px;background:#0e1317}
-    .driver .msg{font-size:.95rem}
-    .band{font-size:.9rem;color:var(--muted)}
-    .footer{color:var(--muted);font-size:.85rem;margin-top:8px}
-    .hint{border-left:3px solid var(--neu);padding-left:10px;margin-top:8px}
-    .badge{padding:2px 8px;border-radius:8px;border:1px solid #22313b}
-    .badge.green{border-color:var(--ok);color:var(--ok)}
-    .badge.yellow{border-color:var(--warn);color:var(--warn)}
-    .badge.red{border-color:var(--bad);color:var(--bad)}
-    .badge.neutral{color:var(--muted);border-color:#22313b}
-    .diag{margin-top:8px;padding:8px;border-radius:10px;background:#0e1317;border:1px solid #1a2430;font-size:.85rem;color:#c9d3dc;white-space:pre-wrap}
-  </style>
+  <link rel="stylesheet" href="style.css">
 </head>
 <body>
   <header>
     <div class="wrap">
       <div class="ampel" id="top-signal">
         <div class="dot neutral" id="sig-dot"></div>
-        <h1 style="margin:0;font-size:1.1rem;">Gold-Kauf-Signal</h1>
+        <h1>Gold-Kauf-Signal</h1>
         <span class="pill" id="sig-text">Lade Daten …</span>
       </div>
     </div>
@@ -52,7 +23,7 @@
         <h2 class="title">Wohin geht Gold?</h2>
         <div class="muted" id="spotline">Spot: —</div>
         <div class="list" id="forecast"></div>
-        <div class="footer band" id="trendnote">Berechnung: 60-Tage-Trend (log-Returns) mit Unsicherheitsband.</div>
+        <div class="footer band" id="trendnote"></div>
       </section>
 
       <section class="card">
@@ -69,175 +40,15 @@
 
       <section class="card" style="grid-column:1/-1;">
         <h2 class="title">System</h2>
-        <div class="muted" id="sys-status">Letztes Update: — • Datenquelle: FRED, stooq</div>
+        <div class="muted" id="sys-status">Letztes Update: —</div>
         <div class="diag" id="diag">Diag: –</div>
       </section>
     </div>
   </main>
 
-  <script>
-    const bust = ()=>`?v=${Date.now()}`;
-    const pct = v => (isFinite(v)? (v>=0? '+' : '') + (100*v).toFixed(1)+'%' : '—');
-    const SERIES = ["GOLDAMGBD228NLBM","DFII10","DTWEXBGS","VIXCLS","DCOILBRENTEU","T10YIE","BAMLH0A0HYM2","NAPM","RECPROUSM156N","T10Y2Y"];
-    const logDiag = (o)=>{ const el=document.getElementById('diag'); el.textContent = "Diag:\n" + JSON.stringify(o,null,2); };
-
-    function assessDrivers(t){
-      const def = (val, betterLow) => {
-        if(val==null || !isFinite(val)) return {status:"neutral", msg:"Neutral (keine Daten)"};
-        if(betterLow){ if(val<=0) return {status:"green", msg:"Gut für deinen Goldpreis"};
-          if(val<1) return {status:"yellow", msg:"Eher neutral"}; return {status:"red", msg:"Schlecht für deinen Goldpreis"}; }
-        else { if(val>=0) return {status:"green", msg:"Gut für deinen Goldpreis"};
-          if(val>-1) return {status:"yellow", msg:"Eher neutral"}; return {status:"red", msg:"Schlecht für deinen Goldpreis"}; }
-      };
-      return {
-        DFII10: def(t.DFII10, true),
-        DTWEXBGS: def(t.DTWEXBGS, true),
-        VIXCLS: def(t.VIXCLS, false),
-        DCOILBRENTEU: def(-t.DCOILBRENTEU, true),
-        T10YIE: def(t.T10YIE, false),
-        BAMLH0A0HYM2: def(t.BAMLH0A0HYM2, false),
-        NAPM: def(-t.NAPM, true),
-        RECPROUSM156N: def(t.RECPROUSM156N, false),
-        T10Y2Y: def(-t.T10Y2Y, true)
-      };
-    }
-    function summarize(drvs){
-      const scoreMap={green:2,yellow:1,red:-2,neutral:0};
-      let s=0,n=0; for(const k in drvs){ s+=scoreMap[drvs[k].status]; n++; }
-      const avg=s/Math.max(1,n);
-      if(avg>=1) return {overall:"green", text:"In Summe eher positiv."};
-      if(avg<=-1) return {overall:"red", text:"In Summe eher negativ."};
-      return {overall:"yellow", text:"In Summe eher neutral."};
-    }
-    function recommendation(overall, momentum){
-      const score = (overall==="green"?2:overall==="red"?-2:0) + (momentum>=0?1:-1);
-      if(score>=2) return {status:"green", text:"Kaufen"};
-      if(score<=-2) return {status:"red", text:"Nicht kaufen"};
-      return {status:"yellow", text:"Abwarten"};
-    }
-    function forecast(series, horizonDays){
-      if(!series || series.length<90) return {median:null, lo:null, hi:null};
-      const sorted=[...series].sort((a,b)=>new Date(a.date)-new Date(b.date));
-      const px = sorted.map(d=>d.price).filter(v=>isFinite(v)&&v>0);
-      if(px.length<90) return {median:null, lo:null, hi:null};
-      const logR=[]; for(let i=1;i<px.length;i++) logR.push(Math.log(px[i]/px[i-1]));
-      const w=Math.min(60,logR.length), tail=logR.slice(-w);
-      const mu = tail.reduce((a,b)=>a+b,0)/Math.max(1,tail.length);
-      const sigma = Math.sqrt(tail.reduce((a,b)=>a+(b-mu)*(b-mu),0)/Math.max(1,tail.length));
-      const last=px[px.length-1], steps=Math.max(1,Math.round(horizonDays));
-      return {median:last*Math.exp(mu*steps), lo:last*Math.exp((mu-1.64*sigma)*steps), hi:last*Math.exp((mu+1.64*sigma)*steps), mu, sigma};
-    }
-
-    (async function(){
-      // Cache-Bust erzwingt frische Files
-      const [hist, spot, diag] = await Promise.all([
-        fetch('data/history.json'+bust()).then(r=>r.json()).catch(()=>({history:[]})),
-        fetch('data/spot.json'+bust()).then(r=>r.json()).catch(()=>({XAUUSD:null,timestamp:null})),
-        fetch('data/diag.json'+bust()).then(r=>r.json()).catch(()=>({}))
-      ]);
-      logDiag(diag);
-
-      const rows = (hist.history||[]).map(r=>({
-        date: r.timestamp,
-        GOLD:r.GOLDAMGBD228NLBM??null,
-        DFII10:r.DFII10??null, DTWEXBGS:r.DTWEXBGS??null, VIXCLS:r.VIXCLS??null, DCOILBRENTEU:r.DCOILBRENTEU??null,
-        T10YIE:r.T10YIE??null, BAMLH0A0HYM2:r.BAMLH0A0HYM2??null, NAPM:r.NAPM??null, RECPROUSM156N:r.RECPROUSM156N??null, T10Y2Y:r.T10Y2Y??null
-      })).sort((a,b)=> new Date(a.date)-new Date(b.date));
-
-      const goldSeries = rows.filter(r=>isFinite(r.GOLD)).map(r=>({date:r.date, price:r.GOLD}));
-
-      // Momentum (10d)
-      let momentum=0;
-      if(goldSeries.length>10){
-        const last=goldSeries[goldSeries.length-1].price;
-        const prev=goldSeries[goldSeries.length-11].price;
-        momentum = Math.log(last/prev)/10;
-      }
-
-      // Treiber (10d relative Deltas)
-      function shortDelta(arr, key){
-        const list = arr.map(r=> ({d:r.date, v:r[key]})).filter(x=>isFinite(x.v));
-        if(list.length<11) return null;
-        const vN=list[list.length-1].v, vP=list[list.length-11].v;
-        if(!isFinite(vN)||!isFinite(vP)) return null;
-        const base=Math.max(1e-9,Math.abs(vP));
-        return (vN-vP)/base;
-      }
-      const latestDelta = {
-        DFII10: shortDelta(rows,'DFII10'),
-        DTWEXBGS: shortDelta(rows,'DTWEXBGS'),
-        VIXCLS: shortDelta(rows,'VIXCLS'),
-        DCOILBRENTEU: shortDelta(rows,'DCOILBRENTEU'),
-        T10YIE: shortDelta(rows,'T10YIE'),
-        BAMLH0A0HYM2: shortDelta(rows,'BAMLH0A0HYM2'),
-        NAPM: shortDelta(rows,'NAPM'),
-        RECPROUSM156N: shortDelta(rows,'RECPROUSM156N'),
-        T10Y2Y: shortDelta(rows,'T10Y2Y')
-      };
-
-      // Render Treiber
-      const labels = {
-        DFII10:"Realzinsen (Zinskosten)", DTWEXBGS:"US-Dollar (Dollar-Stärke)", VIXCLS:"VIX (Marktstress)",
-        DCOILBRENTEU:"Ölpreis (Inflationstreiber)", T10YIE:"Inflationserwartung", BAMLH0A0HYM2:"HY-Spreads",
-        NAPM:"PMI", RECPROUSM156N:"Rezessionsrisiko", T10Y2Y:"Zinskurve 10y–2y"
-      };
-      const assess = assessDrivers(latestDelta);
-      const $drv = document.getElementById('drivers');
-      Object.keys(labels).forEach(k=>{
-        const a = assess[k]||{status:"neutral",msg:"Neutral"};
-        const el=document.createElement('div');
-        el.className='driver';
-        el.innerHTML = `
-          <div class="ampel"><div class="dot ${a.status}"></div><div class="msg"><strong>${labels[k]}</strong><br><span class="muted">${a.msg}</span></div></div>
-          <div class="pill">${isFinite(latestDelta[k])? (latestDelta[k]>=0? '+' : '')+(100*latestDelta[k]).toFixed(1)+'%/10T' : '—'}</div>`;
-        $drv.appendChild(el);
-      });
-
-      const sum = (function(drvs){
-        const scoreMap={green:2,yellow:1,red:-2,neutral:0};
-        let s=0, n=0; for(const k in drvs){ s += scoreMap[drvs[k].status]; n++; }
-        const avg = s/Math.max(1,n);
-        if(avg>=1) return {overall:"green", text:"In Summe eher positiv."};
-        if(avg<=-1) return {overall:"red", text:"In Summe eher negativ."};
-        return {overall:"yellow", text:"In Summe eher neutral."};
-      })(assess);
-      document.getElementById('drivers-sum').textContent = `In Summe: ${sum.text}`;
-
-      const rec = (function(overall, momentum){
-        const score = (overall==="green"?2:overall==="red"?-2:0) + (momentum>=0?1:-1);
-        if(score>=2) return {status:"green", text:"Kaufen"};
-        if(score<=-2) return {status:"red", text:"Nicht kaufen"};
-        return {status:"yellow", text:"Abwarten"};
-      })(sum.overall, momentum);
-      document.getElementById('sig-dot').className = `dot ${rec.status}`;
-      document.getElementById('sig-text').textContent = (rec.text||'—');
-
-      // Spot + System
-      const spotTs = spot.timestamp? new Date(spot.timestamp):null;
-      document.getElementById('spotline').textContent = `Spot: ${spot.XAUUSD!=null ? Number(spot.XAUUSD).toFixed(2)+' USD/oz' : '—'}`;
-      const lastHist = rows.length? rows[rows.length-1].date : null;
-      document.getElementById('sys-status').textContent =
-        `Letztes History-Datum: ${lastHist||'—'} • Datenquelle: FRED, stooq`;
-
-      // Forecasts (zeigen „—“, solange <90 Punkte)
-      const horizons=[30,90,180];
-      const $fc = document.getElementById('forecast');
-      horizons.forEach(h=>{
-        const f = forecast(goldSeries, h);
-        const last = goldSeries.length ? goldSeries[goldSeries.length-1].price : null;
-        const medPct = (isFinite(f.median) && isFinite(last) && last>0) ? (f.median/last - 1) : null;
-        const status = (!isFinite(medPct) ? 'neutral' : medPct>0.02 ? 'green' : medPct<-0.02 ? 'red' : 'yellow');
-        const bandLo = (isFinite(f.lo) && isFinite(f.median) && f.median>0) ? (100*(f.lo/f.median - 1)).toFixed(1)+'%' : '—';
-        const bandHi = (isFinite(f.hi) && isFinite(f.median) && f.median>0) ? (100*(f.hi/f.median - 1)).toFixed(1)+'%' : '—';
-        const wrap = document.createElement('div');
-        wrap.className='kpi';
-        wrap.innerHTML = `
-          <span>${h} Tage</span>
-          <span><span class="badge ${status}">${isFinite(medPct)? (medPct>=0?'+':'')+(100*medPct).toFixed(1)+'%':'—'}</span>
-          <span class="band">[${bandLo}, ${bandHi}]</span></span>`;
-        $fc.appendChild(wrap);
-      });
-    })();
-  </script>
+  <!-- Preflight: prüft ob JSONs ladbar -->
+  <script src="preflight.js"></script>
+  <!-- Main-App -->
+  <script src="app.js"></script>
 </body>
 </html>
