@@ -23,7 +23,7 @@
         <h2 class="title">Wohin geht Gold?</h2>
         <div class="muted" id="spotline">Spot: —</div>
         <div class="list" id="forecast"></div>
-        <div class="footer band" id="trendnote"></div>
+        <div class="footer band" id="trendnote">Berechnung: 60-Tage-Trend (log-Returns) mit Unsicherheitsband.</div>
       </section>
 
       <section class="card">
@@ -40,15 +40,15 @@
 
       <section class="card" style="grid-column:1/-1;">
         <h2 class="title">System</h2>
-        <div class="muted" id="sys-status">Letztes Update: —</div>
+        <div class="muted" id="sys-status">Letztes Update: — • Datenquelle: FRED, stooq</div>
         <div class="diag" id="diag">Diag: –</div>
       </section>
     </div>
   </main>
 
-  <!-- Preflight: prüft ob JSONs ladbar -->
+  <!-- Preflight (lädt und prüft JSONs) -->
   <script src="preflight.js"></script>
-  <!-- Main-App -->
+  <!-- App-Logik -->
   <script src="app.js"></script>
 </body>
 </html>
