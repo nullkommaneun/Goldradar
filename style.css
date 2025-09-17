@@ -1,0 +1,38 @@
+/* ...bestehende Styles bleiben unverändert... */
+
+/* Info-Icon */
+.info{
+  display:inline-flex; align-items:center; justify-content:center;
+  width:28px; height:28px; min-width:28px; min-height:28px;
+  border-radius:50%; border:1px solid #22313b; color:var(--muted);
+  font-size:12px; font-weight:700; background:transparent;
+  margin-left:4px; cursor:pointer;
+}
+.info:focus-visible{ outline:2px solid rgba(85,181,255,.5); outline-offset:2px }
+
+/* Tooltip-Popover */
+.tooltip {
+  position: fixed; z-index: 50;
+  max-width: 90vw; width: min(320px, 90vw);
+  background: #0f1419;
+  border: 1px solid #1b2731;
+  color: var(--ink);
+  border-radius: 10px;
+  padding: 10px 12px;
+  box-shadow: 0 8px 30px rgba(0,0,0,.5);
+  font-size: var(--fs-sm);
+}
+.tooltip[data-pos="top"]::after,
+.tooltip[data-pos="bottom"]::after{
+  content:"";
+  position:absolute; left:16px;
+  border:8px solid transparent;
+}
+.tooltip[data-pos="top"]::after{
+  bottom:-16px; border-top-color:#1b2731;
+}
+.tooltip[data-pos="bottom"]::after{
+  top:-16px; border-bottom-color:#1b2731;
+}
+
+/* Skeletons usw. bleiben wie in deiner aktuellen Datei */
