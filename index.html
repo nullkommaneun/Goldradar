@@ -1,0 +1,136 @@
+<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Gold-Kauf-Signal</title>
+  <link rel="stylesheet" href="style.css">
+  <link rel="preload" href="style.css" as="style">
+</head>
+<body class="is-loading">
+  <header role="banner" class="site-header">
+    <div class="wrap header-wrap">
+      <div class="brand">
+        <span class="dot dot--brand" aria-hidden="true"></span>
+        <h1 class="brand-title">Gold-Kauf-Signal</h1>
+      </div>
+      <span id="sig-text" class="pill pill--lg" aria-live="polite">Lade Daten …</span>
+      <span id="sig-dot" class="dot neutral" aria-hidden="true"></span>
+    </div>
+  </header>
+
+  <main class="wrap" role="main">
+    <div class="grid">
+
+      <!-- Portfoliokontext -->
+      <section class="card" aria-labelledby="sec-portfolio">
+        <h2 id="sec-portfolio" class="title">Dein Goldbestand</h2>
+        <p class="muted subline">Gib deinen Bestand in Gramm ein. Wir berechnen den aktuellen Wert in USD.</p>
+        <div class="form-row">
+          <label for="holdings-grams" class="form-label">Bestand</label>
+          <div class="form-input-wrap">
+            <input id="holdings-grams" type="number" inputmode="decimal" min="0" step="0.1" placeholder="0" class="input">
+            <span class="input-suffix">g</span>
+          </div>
+        </div>
+        <div class="kpi kpi--portfolio">
+          <span>Aktueller Wert</span>
+          <span id="holdings-value" class="badge neutral">—</span>
+        </div>
+        <div class="footer band" id="holdings-note">Preisquelle: Spot (USD/kg), Fallback LBMA-Fix.</div>
+      </section>
+
+      <section class="card" aria-labelledby="sec-forecast">
+        <h2 id="sec-forecast" class="title">Wohin geht Gold?</h2>
+        <div class="muted" id="spotline">Spot: —</div>
+        <div id="forecast" class="list list--kpi">
+          <!-- Skeletons -->
+          <div class="kpi skeleton"><span>30 Tage</span><span class="skeleton-bar"></span></div>
+          <div class="kpi skeleton"><span>90 Tage</span><span class="skeleton-bar"></span></div>
+          <div class="kpi skeleton"><span>180 Tage</span><span class="skeleton-bar"></span></div>
+        </div>
+        <div class="footer band" id="trendnote">Berechnung: 60-Tage-Trend (log-Returns) mit Unsicherheitsband.</div>
+      </section>
+
+      <section class="card" aria-labelledby="sec-why">
+        <h2 id="sec-why" class="title">Das bewegt den Goldpreis gerade</h2>
+        <p class="muted subline">
+          Hier siehst du die wichtigsten Marktkräfte und ob sie deinem Goldpreis helfen oder schaden.
+        </p>
+
+        <div class="driver-group">
+          <h3 class="group-title">
+            Geld &amp; Zinsen
+            <span id="gs-rates" class="dot neutral" aria-label="Gruppenstatus Geld & Zinsen"></span>
+          </h3>
+          <div class="list" id="grp-rates">
+            <div class="driver skeleton"><div class="skeleton-bar"></div></div>
+            <div class="driver skeleton"><div class="skeleton-bar"></div></div>
+            <div class="driver skeleton"><div class="skeleton-bar"></div></div>
+          </div>
+        </div>
+
+        <div class="driver-group">
+          <h3 class="group-title">
+            Märkte &amp; Risiko
+            <span id="gs-risk" class="dot neutral" aria-label="Gruppenstatus Märkte & Risiko"></span>
+          </h3>
+          <div class="list" id="grp-risk">
+            <div class="driver skeleton"><div class="skeleton-bar"></div></div>
+            <div class="driver skeleton"><div class="skeleton-bar"></div></div>
+            <div class="driver skeleton"><div class="skeleton-bar"></div></div>
+            <div class="driver skeleton"><div class="skeleton-bar"></div></div>
+          </div>
+        </div>
+
+        <div class="driver-group">
+          <h3 class="group-title">
+            Konjunktur &amp; Rohstoffe
+            <span id="gs-real" class="dot neutral" aria-label="Gruppenstatus Konjunktur & Rohstoffe"></span>
+          </h3>
+          <div class="list" id="grp-real">
+            <div class="driver skeleton"><div class="skeleton-bar"></div></div>
+            <div class="driver skeleton"><div class="skeleton-bar"></div></div>
+          </div>
+        </div>
+
+        <div class="legend">
+          <span class="legend-item"><span class="dot green"></span> Rückenwind</span>
+          <span class="legend-item"><span class="dot yellow"></span> Neutral</span>
+          <span class="legend-item"><span class="dot red"></span> Gegenwind</span>
+        </div>
+
+        <div class="hint" id="drivers-sum">In Summe: —</div>
+      </section>
+
+      <section class="card card--full" aria-labelledby="sec-analog">
+        <h2 id="sec-analog" class="title">Historischer Vergleich</h2>
+        <div id="analogs" class="list">
+          <div class="driver skeleton"><div class="skeleton-bar"></div></div>
+          <div class="driver skeleton"><div class="skeleton-bar"></div></div>
+          <div class="driver skeleton"><div class="skeleton-bar"></div></div>
+        </div>
+        <div class="footer">Methode: Cosine-Similarity über Treibervektor (normiert).</div>
+      </section>
+
+      <section class="card card--full" aria-labelledby="sec-system">
+        <h2 id="sec-system" class="title">System</h2>
+        <div class="muted" id="system-info">Datenquelle: FRED, stooq</div>
+        <details class="diag-details">
+          <summary class="diag-summary">Diagnose</summary>
+          <pre class="diag" id="diag">Diag: –</pre>
+        </details>
+      </section>
+    </div>
+  </main>
+
+  <script src="preflight.js" defer></script>
+  <script src="app.js" defer></script>
+  <script>
+    // Service Worker Registrierung (optional, verbessert Wiederaufrufe)
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.register('./sw.js').catch(()=>{});
+    }
+  </script>
+</body>
+</html>
