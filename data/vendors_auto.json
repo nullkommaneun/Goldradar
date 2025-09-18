@@ -1,5 +1,5 @@
 {
-  "generated": "2025-09-18T08:32:40Z",
+  "generated": "2025-09-18T10:26:10Z",
   "fx": {
     "EURUSD": 1.08
   },
@@ -34,7 +34,7 @@
   "diagnostics": {
     "totals": {
       "domains": 4,
-      "pages": 451,
+      "pages": 322,
       "products": 0,
       "offers": 0,
       "items": 0
@@ -66,7 +66,7 @@
       },
       {
         "domain": "philoro.de",
-        "pages": 220,
+        "pages": 91,
         "products": 0,
         "offers": 0,
         "items": 0,
