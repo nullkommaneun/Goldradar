@@ -617,4 +617,38 @@ def main():
     print("Diagnostics:", json.dumps(out["diagnostics"], ensure_ascii=False))
 
 if __name__ == "__main__":
+    import argparse, sys, textwrap
+
+def run_testmode(url: str):
+    import httpx, extruct, lxml.html
+    print(f"[TEST] Fetching {url}")
+    headers = {"user-agent": "Mozilla/5.0 (compatible; Goldradar/1.0)"}
+    with httpx.Client(http2=True, headers=headers, follow_redirects=True, timeout=30) as client:
+        resp = client.get(url)
+        print(f"[TEST] Status: {resp.status_code}, Length={len(resp.text)}")
+        if "consent" in resp.text.lower():
+            print("[TEST] Consent wall detected")
+        tree = lxml.html.fromstring(resp.text)
+        data = extruct.extract(resp.text, base_url=url)
+        for k, v in data.items():
+            if v:
+                print(f"[TEST] Found {len(v)} {k} entries")
+                for entry in v[:1]:
+                    snippet = str(entry)
+                    print("[TEST] Example:", textwrap.shorten(snippet, width=200))
+        og_title = tree.xpath("//meta[@property='og:title']/@content")
+        og_price = tree.xpath("//meta[@property='product:price:amount']/@content")
+        if og_title:
+            print("[TEST] og:title =", og_title[0])
+        if og_price:
+            print("[TEST] og:price =", og_price[0])
+
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--test", help="Test a single product URL")
+    args, unknown = parser.parse_known_args()
+    if args.test:
+        run_testmode(args.test)
+        sys.exit(0)
+    main()
     main()
