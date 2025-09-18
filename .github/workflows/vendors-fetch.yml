@@ -3,7 +3,7 @@ name: vendors-fetch
 on:
   workflow_dispatch:
   schedule:
-    - cron: "*/30 * * * *"  # alle 30 Minuten (UTC)
+    - cron: "*/120 * * * *"  # alle 120 Minuten (UTC)
 
 concurrency:
   group: vendors-fetch-${{ github.ref }}
