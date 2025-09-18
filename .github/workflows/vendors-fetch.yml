@@ -3,7 +3,7 @@ name: vendors-fetch
 on:
   workflow_dispatch:
   schedule:
-    - cron: "*/30 * * * *" # alle 30 Minuten
+    - cron: "*/30 * * * *"  # alle 30 Minuten (UTC)
 
 concurrency:
   group: vendors-fetch-${{ github.ref }}
@@ -31,7 +31,15 @@ jobs:
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install httpx lxml extruct
+          # Stabilere Parser-Basis
+          pip install "lxml>=4.9.3,<5"
+          # HTTP/2-Support für httpx (zieht 'h2' nach)
+          pip install "httpx[http2]==0.27.2"
+          # Structured-Data-Extractor
+          pip install "extruct==0.16.0"
+          # Tools
+          sudo apt-get update -y
+          sudo apt-get install -y jq
 
       - name: Run vendor fetcher
         run: |
@@ -41,7 +49,7 @@ jobs:
           echo "Preview diagnostics:"
           jq '.diagnostics' data/vendors_auto.json || true
 
-      # >>>> NEU: Rebase auf Remote, um Non-Fast-Forward zu vermeiden
+      # Rebase, um Non-Fast-Forward zu vermeiden (Datei ist generiert -> safe)
       - name: Rebase onto origin/main (or reset if conflicts)
         run: |
           git config user.name "github-actions[bot]"
@@ -51,7 +59,7 @@ jobs:
           git rebase origin/main
           REBASE_RC=$?
           if [ $REBASE_RC -ne 0 ]; then
-            echo "Rebase conflict – resetting to origin/main (generated file, safe to overwrite)"
+            echo "Rebase-Konflikt – reset auf origin/main"
             git rebase --abort || true
             git reset --hard origin/main
           fi
@@ -65,7 +73,6 @@ jobs:
           push_options: '--force-with-lease'
           commit_user_name: github-actions[bot]
           commit_user_email: 41898282+github-actions[bot]@users.noreply.github.com
-          # branch: leer lassen = aktuelle Branch (main)
 
       - name: Report build status
         run: |
