@@ -1,5 +1,5 @@
 {
-  "generated": "2025-09-18T04:29:28Z",
+  "generated": "2025-09-18T06:00:27Z",
   "fx": {
     "EURUSD": 1.08
   },
@@ -34,7 +34,7 @@
   "diagnostics": {
     "totals": {
       "domains": 4,
-      "pages": 311,
+      "pages": 238,
       "products": 0,
       "offers": 0,
       "items": 0
@@ -50,7 +50,7 @@
       },
       {
         "domain": "degussa-goldhandel.de",
-        "pages": 150,
+        "pages": 200,
         "products": 0,
         "offers": 0,
         "items": 0,
@@ -66,7 +66,7 @@
       },
       {
         "domain": "philoro.de",
-        "pages": 150,
+        "pages": 27,
         "products": 0,
         "offers": 0,
         "items": 0,
