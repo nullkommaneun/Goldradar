@@ -1,11 +1,14 @@
 #!/usr/bin/env python3
+# -*- coding: utf-8 -*-
 """
-Vendors-Autofetch (inkl. philoro.de)
-- Discovery: Sitemaps + Category-Seeds + /produkt/ Heuristik
-- Structured Data: JSON-LD, Microdata, RDFa (extruct) + Fallbacks (itemprop, einfache Script-Patterns)
-- Produktklassifizierung (100g-Bar, 1oz-Coins)
-- Premium ggü. Spot (EUR/g) mit ECB EURUSD
-- Diagnostics in data/vendors_auto.json
+Vendors-Autofetch – robuste Extraktion für seriöse Händler (philoro, Degussa, Heubach, pro aurum)
+- Discovery: Sitemaps + Seeds + Domain-Heuristiken (/produkt/ u.a.)
+- Parsing: JSON-LD (inkl. @graph & Offer.itemOffered), Microdata/RDFa,
+           OpenGraph-Product-Meta, itemprop=price/priceCurrency,
+           vorsichtige JSON-Fallbacks (nur Price/Currency)
+- Normalisierung: EUR-Preise, Gewicht, Produktklassifikation, Premium vs. Spot
+- Diagnostics: detaillierte Zählwerte + Beispiel-URLs je Extraktionsweg
+- Ausgabe: data/vendors_auto.json
 """
 
 from __future__ import annotations
@@ -16,14 +19,16 @@ import urllib.robotparser as robotparser
 
 import httpx
 from lxml import html
-import extruct
-from extruct.jsonld import JsonLdExtractor
+try:
+    import extruct
+    from extruct.jsonld import JsonLdExtractor
+    HAS_EXSTRUCT = True
+except Exception:
+    HAS_EXSTRUCT = False
 
 ROOT = Path(__file__).resolve().parents[1]
 DATA_DIR = ROOT / "data"
 DATA_DIR.mkdir(parents=True, exist_ok=True)
-
-# ------------------------- Konfiguration / Domains -------------------------
 
 WHITELIST = [
     "proaurum.de",
@@ -32,7 +37,6 @@ WHITELIST = [
     "philoro.de",
 ]
 
-# Kategorie-Seeds für initiale Discovery
 DOMAIN_SEEDS: dict[str, list[str]] = {
     "philoro.de": [
         "https://philoro.de/shop/goldbarren",
@@ -51,7 +55,7 @@ HTTP_TIMEOUT = 20.0
 
 MAX_URLS_PER_DOMAIN = 220
 MAX_SITEMAPS = 10
-REQ_DELAY = 0.9  # freundlich crawlen
+REQ_DELAY = 0.9  # höflich
 
 # ----------------------------- Helpers ------------------------------------
 
@@ -106,6 +110,7 @@ def robots_ok(domain: str, url: str) -> bool:
 # ----------------------------- Discovery ----------------------------------
 
 KW_PATH = (
+    "produkt",      # wichtig für philoro
     "gold", "goldmuenzen", "goldbarren",
     "barren", "bar", "muenze", "münze",
     "maple", "kruger", "krügerrand", "kruegerrand",
@@ -117,22 +122,21 @@ def looks_product_path_generic(path: str) -> bool:
     return any(k in p for k in KW_PATH)
 
 def looks_product_path(domain: str, path: str) -> bool:
-    """Erkennt Produktdetailseiten (domainspezifisch erweitert)."""
     p = path.lower().rstrip("/")
 
-    # philoro: Produktdetails liegen unter /produkt/<slug>
     if domain == "philoro.de":
+        # Echte Produktseiten liegen unter /produkt/<slug>
         if p.startswith("/produkt/") and len(p) > len("/produkt/") + 3:
             return True
-        # Kategorieseiten (Seeds) ausschließen
-        if p in ("/shop/goldbarren", "/shop/goldbarren-100g", "/shop/goldmuenzen-krugerrand"):
-            return False
-        # Sicherheitsnetz: /shop/goldbarren-* und /shop/goldmuenzen-* mit tieferem Segment als Kandidat
+        # /shop/ mit tieferem slug kann Produkt sein (Sicherheitsnetz)
         if p.startswith("/shop/") and "-" in p.split("/")[-1]:
             return True
+        # Kategorie-Roots nicht als Produkt
+        if p in ("/shop/goldbarren", "/shop/goldbarren-100g", "/shop/goldmuenzen-krugerrand"):
+            return False
         return looks_product_path_generic(p)
 
-    # Default
+    # Degussa/pro aurum/heubach: generische Heuristik
     return looks_product_path_generic(p)
 
 def discover_from_sitemaps(client: httpx.Client, domain: str) -> list[str]:
@@ -212,25 +216,35 @@ def find_candidate_urls(client: httpx.Client, domain: str) -> list[str]:
 
 # ----------------------- Structured Data Parsing --------------------------
 
+RE_PRICE_JSON = re.compile(
+    r'"price"\s*:\s*"?(?P<price>[\d\.,]+)"?\s*[,}]', re.I
+)
+RE_CURR_JSON  = re.compile(
+    r'"priceCurrency"\s*:\s*"(?P<cur>[A-Z]{3})"', re.I
+)
+
 def parse_structured(html_bytes: bytes, base_url: str) -> dict:
     """
-    Sammelt Produkte aus JSON-LD/Microdata/RDFa. Erkennt auch:
-    - @graph mit Product- und Offer-Knoten
-    - Offer.itemOffered → Product
-    - Fallback: itemprop="price"/"priceCurrency" in HTML
+    Liefert dict mit:
+      { "products": [ JSON-LD/Microdata/RDFa/Fallback-Produkte ],
+        "hints": {counts...} }
     """
-    data = {"products":[]}
-    try:
-        ext = extruct.extract(
-            html_bytes, base_url=base_url,
-            syntaxes=["json-ld","microdata","rdfa"],
-            uniform=True
-        )
-    except Exception:
+    data = {"products": [], "hints": {"jsonld":0, "micro_rdfa":0, "og":0, "itemprop":0, "json_fallback":0}}
+    # JSON-LD / extruct
+    if HAS_EXSTRUCT:
         try:
-            ext = {"json-ld": JsonLdExtractor().extract(html_bytes.decode("utf-8","ignore"))}
+            ext = extruct.extract(
+                html_bytes, base_url=base_url,
+                syntaxes=["json-ld","microdata","rdfa"],
+                uniform=True
+            )
         except Exception:
-            ext = {}
+            try:
+                ext = {"json-ld": JsonLdExtractor().extract(html_bytes.decode("utf-8","ignore"))}
+            except Exception:
+                ext = {}
+    else:
+        ext = {}
 
     def push_product(node: dict):
         if not isinstance(node, dict): return
@@ -242,31 +256,29 @@ def parse_structured(html_bytes: bytes, base_url: str) -> dict:
         for n in nodes:
             if not isinstance(n, dict): continue
             t = n.get("@type")
-            # @graph
             if isinstance(n.get("@graph"), list):
                 for g in n["@graph"]:
                     if not isinstance(g, dict): continue
                     gt = g.get("@type")
                     if (gt == "Product") or (isinstance(gt, list) and "Product" in gt):
-                        push_product(g)
+                        push_product(g); data["hints"]["jsonld"] += 1
                     if gt == "Offer" and isinstance(g.get("itemOffered"), dict):
-                        prod = g["itemOffered"]; prod.setdefault("offers", g); push_product(prod)
+                        prod = g["itemOffered"]; prod.setdefault("offers", g)
+                        push_product(prod); data["hints"]["jsonld"] += 1
                 continue
-            # Product
             if (t == "Product") or (isinstance(t, list) and "Product" in t):
-                push_product(n); continue
-            # Offer → Product
+                push_product(n); data["hints"]["jsonld"] += 1; continue
             if (t == "Offer") or (isinstance(t, list) and "Offer" in t):
                 if isinstance(n.get("itemOffered"), dict):
-                    prod = n["itemOffered"]; prod.setdefault("offers", n); push_product(prod)
-            # ItemList → Links
+                    prod = n["itemOffered"]; prod.setdefault("offers", n)
+                    push_product(prod); data["hints"]["jsonld"] += 1
             if n.get("@type") == "ItemList" and isinstance(n.get("itemListElement"), list):
                 for it in n["itemListElement"]:
                     u = it.get("url") or (isinstance(it.get("item"), dict) and it["item"].get("@id"))
                     if isinstance(u, str):
                         data.setdefault("links", []).append(u)
 
-    # Microdata / RDFa → Product
+    # Microdata/RDFa
     for syntax in ("microdata","rdfa"):
         for node in ext.get(syntax, []) or []:
             try:
@@ -281,56 +293,67 @@ def parse_structured(html_bytes: bytes, base_url: str) -> dict:
                             "description": props.get("description"),
                             "weight": props.get("weight"),
                             "offers": props.get("offers")}
-                    push_product(prod)
+                    push_product(prod); data["hints"]["micro_rdfa"] += 1
             except Exception:
                 continue
 
-    # Fallback: HTML itemprop/meta
+    # OpenGraph-Product (og:product:price:amount / currency)
     try:
         doc = html.fromstring(html_bytes)
-        # Preis
+        og_price = doc.xpath("//meta[@property='product:price:amount']/@content")
+        og_curr  = doc.xpath("//meta[@property='product:price:currency']/@content")
+        if og_price:
+            prod = {"@type":"Product", "name": (doc.xpath('//meta[@property="og:title"]/@content') or [""])[0].strip()}
+            prod["offers"] = {"@type":"Offer", "price": og_price[0], "priceCurrency": (og_curr[0].upper() if og_curr else "EUR")}
+            push_product(prod); data["hints"]["og"] += 1
+    except Exception:
+        pass
+
+    # itemprop-Fallback
+    try:
+        doc = html.fromstring(html_bytes)
         price_candidates = []
         price_candidates += doc.xpath('//*[@itemprop="price"]/@content')
-        price_candidates += doc.xpath('//*[@itemprop="price"]/text()')
-        # Währung
+        price_candidates += [t.strip() for t in doc.xpath('normalize-space((//*[@itemprop="price"])[1])') if t]
         cur_candidates = []
         cur_candidates += doc.xpath('//*[@itemprop="priceCurrency"]/@content')
-        cur_candidates += doc.xpath('//*[@itemprop="priceCurrency"]/text()')
-
+        cur_candidates += [t.strip() for t in doc.xpath('normalize-space((//*[@itemprop="priceCurrency"])[1])') if t]
         if price_candidates:
             prod = {"@type":"Product", "name": (doc.xpath("//h1/text()") or [""])[0].strip()}
-            prod["offers"] = {
-                "@type": "Offer",
-                "price": price_candidates[0],
-                "priceCurrency": (cur_candidates[0] if cur_candidates else "EUR")
-            }
-            data["products"].append(prod)
+            prod["offers"] = {"@type":"Offer", "price": price_candidates[0], "priceCurrency": (cur_candidates[0].upper() if cur_candidates else "EUR")}
+            push_product(prod); data["hints"]["itemprop"] += 1
+    except Exception:
+        pass
 
-        # einfache JSON-Script-Fallbacks (vorsichtig, nur sichere Muster)
-        for s in doc.xpath("//script[contains(text(),'\"price\"')]/text()"):
-            m = re.search(r'"price"\s*:\s*"?(?P<p>[\d\.,]+)"?\s*,\s*"priceCurrency"\s*:\s*"(?P<c>[A-Z]{3})"', s)
-            if m:
-                prod = {"@type":"Product", "name": (doc.xpath("//h1/text()") or [""])[0].strip()}
-                prod["offers"] = {"@type": "Offer", "price": m.group("p"), "priceCurrency": m.group("c")}
-                data["products"].append(prod)
-                break
+    # JSON-RegEx-Fallback (vorsichtig, nur price & currency in einem Script-Block)
+    try:
+        doc = html.fromstring(html_bytes)
+        for s in doc.xpath("//script/text()"):
+            if "price" in s:
+                m1 = RE_PRICE_JSON.search(s)
+                m2 = RE_CURR_JSON.search(s)
+                if m1 and m2:
+                    prod = {"@type":"Product", "name": (doc.xpath("//h1/text()") or [""])[0].strip()}
+                    prod["offers"] = {"@type":"Offer", "price": m1.group("price"), "priceCurrency": m2.group("cur")}
+                    push_product(prod); data["hints"]["json_fallback"] += 1
+                    break
     except Exception:
         pass
 
     return data
 
-# ---------------------- Normalisierung (Produkt/Preis) --------------------
+# ---------------------- Normalisierung & Klassifikation --------------------
 
 def as_float(x):
     try:
         if isinstance(x, str):
-            x = x.replace(",", ".").strip()
+            x = x.replace(".", "").replace(",", ".").strip()
         return float(x)
     except Exception:
         return None
 
-RE_G  = re.compile(r"(\d{1,4}[\,\.]?\d*)\s*g\b", re.I)
-RE_OZ = re.compile(r"(\d{1,2}([\,\.]\d+)?)\s*(oz|unze)", re.I)
+RE_G  = re.compile(r"(\d{1,4}(?:[\,\.]\d+)?)\s*g\b", re.I)
+RE_OZ = re.compile(r"(\d{1,2}(?:[\,\.]\d+)?)\s*(oz|unze)", re.I)
 
 def extract_weight_g(prod: dict) -> float | None:
     w = prod.get("weight")
@@ -343,11 +366,13 @@ def extract_weight_g(prod: dict) -> float | None:
 
     name = " ".join([str(prod.get("name") or ""), str(prod.get("description") or "")])
     m = RE_G.search(name)
-    if m: return as_float(m.group(1))
+    if m:
+        val = as_float(m.group(1))
+        if val is not None: return val
     m = RE_OZ.search(name)
     if m:
         val = as_float(m.group(1))
-        return val * OZ_TO_G if val is not None else None
+        if val is not None: return val * OZ_TO_G
     return None
 
 def classify_product(name: str, weight_g: float | None) -> str | None:
@@ -366,13 +391,10 @@ def classify_product(name: str, weight_g: float | None) -> str | None:
 def normalize_offer(offer) -> dict | None:
     if not isinstance(offer, dict): return None
 
-    # Preis direkt
     price = as_float(offer.get("price") or offer.get("lowPrice") or offer.get("highPrice"))
-    # priceSpecification
     if price is None and isinstance(offer.get("priceSpecification"), dict):
         price = as_float(offer["priceSpecification"].get("price"))
 
-    # Währung
     cur = (offer.get("priceCurrency") or "").upper() or None
     if not cur and isinstance(offer.get("priceSpecification"), dict):
         cur = (offer["priceSpecification"].get("priceCurrency") or "").upper() or None
@@ -435,7 +457,11 @@ def main():
             spot_eur_per_g = eur_per_g
 
         for domain in WHITELIST:
-            dstat = {"domain": domain, "pages": 0, "products": 0, "offers": 0, "items": 0, "notes": []}
+            dstat = {
+                "domain": domain, "pages": 0, "products": 0, "offers": 0, "items": 0, "notes": [],
+                "pages_with_jsonld": 0, "pages_with_micro": 0, "pages_with_og": 0, "pages_with_fallback": 0,
+                "examples": {"jsonld": [], "micro": [], "og": [], "fallback": []}
+            }
             out["diagnostics"]["domains"].append(dstat)
             out["diagnostics"]["totals"]["domains"] += 1
 
@@ -458,20 +484,47 @@ def main():
                     continue
                 dstat["pages"] += 1
 
-                data = parse_structured(r.content, u)
-                products = data.get("products") or []
+                parsed = parse_structured(r.content, u)
+                products = parsed.get("products") or []
+                hints = parsed.get("hints") or {}
+                if hints.get("jsonld"): 
+                    dstat["pages_with_jsonld"] += 1
+                    if len(dstat["examples"]["jsonld"]) < 3: dstat["examples"]["jsonld"].append(u)
+                if hints.get("micro_rdfa"): 
+                    dstat["pages_with_micro"] += 1
+                    if len(dstat["examples"]["micro"]) < 3: dstat["examples"]["micro"].append(u)
+                if hints.get("og"): 
+                    dstat["pages_with_og"] += 1
+                    if len(dstat["examples"]["og"]) < 3: dstat["examples"]["og"].append(u)
+                if hints.get("itemprop") or hints.get("json_fallback"):
+                    dstat["pages_with_fallback"] += 1
+                    if len(dstat["examples"]["fallback"]) < 3: dstat["examples"]["fallback"].append(u)
+
                 dstat["products"] += len(products)
 
-                # ItemList-Links (begrenzter Fanout)
-                for link in (data.get("links") or [])[:8]:
+                # ItemList-Links (kleiner Fanout)
+                for link in (parsed.get("links") or [])[:6]:
                     if link in seen: continue
                     if not robots_ok(domain, link): continue
                     r2 = fetch(client, link); time.sleep(REQ_DELAY)
                     seen.add(link)
                     if r2 and r2.status_code==200 and r2.content:
-                        more = parse_structured(r2.content, link)
-                        ps = more.get("products") or []
-                        dstat["pages"] += 1
+                        parsed2 = parse_structured(r2.content, link)
+                        ps = parsed2.get("products") or []
+                        hints2 = parsed2.get("hints") or {}
+                        if hints2.get("jsonld"): 
+                            dstat["pages_with_jsonld"] += 1
+                            if len(dstat["examples"]["jsonld"]) < 3: dstat["examples"]["jsonld"].append(link)
+                        if hints2.get("micro_rdfa"): 
+                            dstat["pages_with_micro"] += 1
+                            if len(dstat["examples"]["micro"]) < 3: dstat["examples"]["micro"].append(link)
+                        if hints2.get("og"): 
+                            dstat["pages_with_og"] += 1
+                            if len(dstat["examples"]["og"]) < 3: dstat["examples"]["og"].append(link)
+                        if hints2.get("itemprop") or hints2.get("json_fallback"):
+                            dstat["pages_with_fallback"] += 1
+                            if len(dstat["examples"]["fallback"]) < 3: dstat["examples"]["fallback"].append(link)
+
                         dstat["products"] += len(ps)
                         products.extend(ps)
 
@@ -498,7 +551,7 @@ def main():
                         "price": {"value": round(price, 2), "currency": "EUR", "shipping_included": offer["shipping_included"]},
                         "availability": offer["availability"] or "Unknown",
                         "checked_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
-                        "source": "structured",
+                        "source": "structured_or_fallback",
                         "url": u
                     }
 
@@ -533,4 +586,4 @@ def main():
     print("Diagnostics:", json.dumps(out["diagnostics"], ensure_ascii=False))
 
 if __name__ == "__main__":
-    main()
+    main() 
