@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
 """
-Vendors-Autofetch für seriöse Händler (inkl. philoro.de)
-- Discovery: Sitemaps + Category-Seeds + Domain-Heuristiken
-- Strukturierte Daten: JSON-LD, Microdata, RDFa (extruct) + Fallback-JSON-LD
-- Produkt-/Offer-Normalisierung inkl. priceSpecification & @graph
-- Premium ggü. Spot (EUR/g) auf Basis von spot.json + ECB EURUSD
-- Diagnostics in vendors_auto.json
+Vendors-Autofetch (inkl. philoro.de)
+- Discovery: Sitemaps + Category-Seeds + /produkt/ Heuristik
+- Structured Data: JSON-LD, Microdata, RDFa (extruct) + Fallbacks (itemprop, einfache Script-Patterns)
+- Produktklassifizierung (100g-Bar, 1oz-Coins)
+- Premium ggü. Spot (EUR/g) mit ECB EURUSD
+- Diagnostics in data/vendors_auto.json
 """
 
 from __future__ import annotations
@@ -29,14 +29,15 @@ WHITELIST = [
     "proaurum.de",
     "degussa-goldhandel.de",
     "heubach-edelmetalle.de",
-    "philoro.de",  # neu
+    "philoro.de",
 ]
 
+# Kategorie-Seeds für initiale Discovery
 DOMAIN_SEEDS: dict[str, list[str]] = {
     "philoro.de": [
         "https://philoro.de/shop/goldbarren",
-        "https://philoro.de/shop/goldmuenzen-krugerrand",
         "https://philoro.de/shop/goldbarren-100g",
+        "https://philoro.de/shop/goldmuenzen-krugerrand",
     ],
 }
 
@@ -48,9 +49,9 @@ OZ_TO_G = 31.1034768
 USD_PER_EUR_DEFAULT = 1.08
 HTTP_TIMEOUT = 20.0
 
-MAX_URLS_PER_DOMAIN = 200
+MAX_URLS_PER_DOMAIN = 220
 MAX_SITEMAPS = 10
-REQ_DELAY = 0.9  # höflicher Crawl
+REQ_DELAY = 0.9  # freundlich crawlen
 
 # ----------------------------- Helpers ------------------------------------
 
@@ -105,7 +106,7 @@ def robots_ok(domain: str, url: str) -> bool:
 # ----------------------------- Discovery ----------------------------------
 
 KW_PATH = (
-    "gold", "goldmuenzen", "goldbarren",  # erweitert
+    "gold", "goldmuenzen", "goldbarren",
     "barren", "bar", "muenze", "münze",
     "maple", "kruger", "krügerrand", "kruegerrand",
     "coin", "unze", "1oz", "100g", "100-g", "1-oz"
@@ -116,24 +117,21 @@ def looks_product_path_generic(path: str) -> bool:
     return any(k in p for k in KW_PATH)
 
 def looks_product_path(domain: str, path: str) -> bool:
-    """Domain-spezifische Erkennung von Produkt-Detailseiten."""
+    """Erkennt Produktdetailseiten (domainspezifisch erweitert)."""
     p = path.lower().rstrip("/")
+
+    # philoro: Produktdetails liegen unter /produkt/<slug>
     if domain == "philoro.de":
-        # philoro: Produktseiten liegen meist unter /shop/<slug...> mit Bindestrichen und ohne weitere Kategorie
-        # Beispiel: /shop/goldbarren-100g/philoro-goldbarren-100g
-        if not p.startswith("/shop"):
-            return False
-        # Kategorie-Roots ausschließen (genau die Seeds)
-        if p in ("/shop/goldbarren", "/shop/goldmuenzen-krugerrand", "/shop/goldbarren-100g"):
-            return False
-        # Produkt-Detail hat typischerweise einen weiteren Segmentteil mit Bindestrich
-        last = p.split("/")[-1]
-        if "-" in last and len(last) >= 6:
+        if p.startswith("/produkt/") and len(p) > len("/produkt/") + 3:
             return True
-        # sicherheitshalber: /shop/goldmuenzen-* /shop/goldbarren-* als Kandidaten
-        if "/shop/goldmuenzen-" in p or "/shop/goldbarren-" in p:
+        # Kategorieseiten (Seeds) ausschließen
+        if p in ("/shop/goldbarren", "/shop/goldbarren-100g", "/shop/goldmuenzen-krugerrand"):
+            return False
+        # Sicherheitsnetz: /shop/goldbarren-* und /shop/goldmuenzen-* mit tieferem Segment als Kandidat
+        if p.startswith("/shop/") and "-" in p.split("/")[-1]:
             return True
         return looks_product_path_generic(p)
+
     # Default
     return looks_product_path_generic(p)
 
@@ -215,7 +213,12 @@ def find_candidate_urls(client: httpx.Client, domain: str) -> list[str]:
 # ----------------------- Structured Data Parsing --------------------------
 
 def parse_structured(html_bytes: bytes, base_url: str) -> dict:
-    """Sammelt Produkte aus JSON-LD/Microdata/RDFa. Erkennt auch @graph und Offer.itemOffered."""
+    """
+    Sammelt Produkte aus JSON-LD/Microdata/RDFa. Erkennt auch:
+    - @graph mit Product- und Offer-Knoten
+    - Offer.itemOffered → Product
+    - Fallback: itemprop="price"/"priceCurrency" in HTML
+    """
     data = {"products":[]}
     try:
         ext = extruct.extract(
@@ -235,51 +238,42 @@ def parse_structured(html_bytes: bytes, base_url: str) -> dict:
 
     # JSON-LD
     for node in ext.get("json-ld", []) or []:
-        if not isinstance(node, (dict, list)): continue
         nodes = node if isinstance(node, list) else [node]
         for n in nodes:
             if not isinstance(n, dict): continue
             t = n.get("@type")
-            # @graph kann mehrere Knoten enthalten
-            if "@graph" in n and isinstance(n["@graph"], list):
+            # @graph
+            if isinstance(n.get("@graph"), list):
                 for g in n["@graph"]:
-                    if isinstance(g, dict):
-                        gt = g.get("@type")
-                        if (isinstance(gt,str) and gt.lower()=="product") or (isinstance(gt,list) and any(isinstance(x,str) and x.lower()=="product" for x in gt)):
-                            push_product(g)
-                        # Offer mit itemOffered → Product
-                        if (isinstance(gt,str) and gt.lower()=="offer") and isinstance(g.get("itemOffered"), dict):
-                            prod = g["itemOffered"]; prod.setdefault("offers", g)
-                            push_product(prod)
+                    if not isinstance(g, dict): continue
+                    gt = g.get("@type")
+                    if (gt == "Product") or (isinstance(gt, list) and "Product" in gt):
+                        push_product(g)
+                    if gt == "Offer" and isinstance(g.get("itemOffered"), dict):
+                        prod = g["itemOffered"]; prod.setdefault("offers", g); push_product(prod)
                 continue
-
-            # reines Product
-            is_prod = (isinstance(t,str) and t.lower()=="product") or (isinstance(t,list) and any(isinstance(x,str) and x.lower()=="product" for x in t))
-            if is_prod:
-                push_product(n)
-                continue
-
-            # Offer → itemOffered als Product
-            is_offer = (isinstance(t,str) and t.lower()=="offer") or (isinstance(t,list) and any(isinstance(x,str) and x.lower()=="offer" for x in t))
-            if is_offer and isinstance(n.get("itemOffered"), dict):
-                prod = n["itemOffered"]; prod.setdefault("offers", n)
-                push_product(prod)
-
-            # ItemList (Kategorie) → Links einsammeln
+            # Product
+            if (t == "Product") or (isinstance(t, list) and "Product" in t):
+                push_product(n); continue
+            # Offer → Product
+            if (t == "Offer") or (isinstance(t, list) and "Offer" in t):
+                if isinstance(n.get("itemOffered"), dict):
+                    prod = n["itemOffered"]; prod.setdefault("offers", n); push_product(prod)
+            # ItemList → Links
             if n.get("@type") == "ItemList" and isinstance(n.get("itemListElement"), list):
                 for it in n["itemListElement"]:
                     u = it.get("url") or (isinstance(it.get("item"), dict) and it["item"].get("@id"))
-                    if isinstance(u,str):
-                        data.setdefault("links",[]).append(u)
+                    if isinstance(u, str):
+                        data.setdefault("links", []).append(u)
 
-    # Microdata / RDFa vereinheitlichen
+    # Microdata / RDFa → Product
     for syntax in ("microdata","rdfa"):
         for node in ext.get(syntax, []) or []:
             try:
                 t = node.get("type") or node.get("@type")
                 is_product = False
                 if isinstance(t, list): is_product = any(isinstance(x,str) and x.lower().endswith("product") for x in t)
-                elif isinstance(t,str): is_product = t.lower().endswith("product")
+                elif isinstance(t, str): is_product = t.lower().endswith("product")
                 if is_product:
                     props = node.get("properties") or {}
                     prod = {"@type":"Product",
@@ -291,31 +285,35 @@ def parse_structured(html_bytes: bytes, base_url: str) -> dict:
             except Exception:
                 continue
 
-    # Fallback: rohe <script type="application/ld+json">
+    # Fallback: HTML itemprop/meta
     try:
         doc = html.fromstring(html_bytes)
-        for s in doc.xpath("//script[@type='application/ld+json']/text()"):
-            try:
-                j = json.loads(s)
-            except Exception:
-                continue
-            nodes = j if isinstance(j, list) else [j]
-            for n in nodes:
-                if not isinstance(n, dict): continue
-                if "@graph" in n and isinstance(n["@graph"], list):
-                    for g in n["@graph"]:
-                        if isinstance(g, dict):
-                            gt = g.get("@type")
-                            if (gt == "Product") or (isinstance(gt, list) and "Product" in gt):
-                                push_product(g)
-                            if gt == "Offer" and isinstance(g.get("itemOffered"), dict):
-                                prod = g["itemOffered"]; prod.setdefault("offers", g); push_product(prod)
-                else:
-                    gt = n.get("@type")
-                    if gt == "Product" or (isinstance(gt, list) and "Product" in gt):
-                        push_product(n)
-                    if gt == "Offer" and isinstance(n.get("itemOffered"), dict):
-                        prod = n["itemOffered"]; prod.setdefault("offers", n); push_product(prod)
+        # Preis
+        price_candidates = []
+        price_candidates += doc.xpath('//*[@itemprop="price"]/@content')
+        price_candidates += doc.xpath('//*[@itemprop="price"]/text()')
+        # Währung
+        cur_candidates = []
+        cur_candidates += doc.xpath('//*[@itemprop="priceCurrency"]/@content')
+        cur_candidates += doc.xpath('//*[@itemprop="priceCurrency"]/text()')
+
+        if price_candidates:
+            prod = {"@type":"Product", "name": (doc.xpath("//h1/text()") or [""])[0].strip()}
+            prod["offers"] = {
+                "@type": "Offer",
+                "price": price_candidates[0],
+                "priceCurrency": (cur_candidates[0] if cur_candidates else "EUR")
+            }
+            data["products"].append(prod)
+
+        # einfache JSON-Script-Fallbacks (vorsichtig, nur sichere Muster)
+        for s in doc.xpath("//script[contains(text(),'\"price\"')]/text()"):
+            m = re.search(r'"price"\s*:\s*"?(?P<p>[\d\.,]+)"?\s*,\s*"priceCurrency"\s*:\s*"(?P<c>[A-Z]{3})"', s)
+            if m:
+                prod = {"@type":"Product", "name": (doc.xpath("//h1/text()") or [""])[0].strip()}
+                prod["offers"] = {"@type": "Offer", "price": m.group("p"), "priceCurrency": m.group("c")}
+                data["products"].append(prod)
+                break
     except Exception:
         pass
 
@@ -347,7 +345,7 @@ def extract_weight_g(prod: dict) -> float | None:
     m = RE_G.search(name)
     if m: return as_float(m.group(1))
     m = RE_OZ.search(name)
-    if m: 
+    if m:
         val = as_float(m.group(1))
         return val * OZ_TO_G if val is not None else None
     return None
@@ -370,7 +368,6 @@ def normalize_offer(offer) -> dict | None:
 
     # Preis direkt
     price = as_float(offer.get("price") or offer.get("lowPrice") or offer.get("highPrice"))
-
     # priceSpecification
     if price is None and isinstance(offer.get("priceSpecification"), dict):
         price = as_float(offer["priceSpecification"].get("price"))
@@ -442,7 +439,7 @@ def main():
             out["diagnostics"]["domains"].append(dstat)
             out["diagnostics"]["totals"]["domains"] += 1
 
-            vendor = {"domain": domain, "trust": 95 if domain == "philoro.de" else 90, "items": []}
+            vendor = {"domain": domain, "trust": 98 if domain == "philoro.de" else 90, "items": []}
             urls = find_candidate_urls(client, domain)
             seen = set()
 
@@ -465,7 +462,7 @@ def main():
                 products = data.get("products") or []
                 dstat["products"] += len(products)
 
-                # ItemList-Links: kurz auflösen (begrenzter Fanout)
+                # ItemList-Links (begrenzter Fanout)
                 for link in (data.get("links") or [])[:8]:
                     if link in seen: continue
                     if not robots_ok(domain, link): continue
@@ -491,7 +488,7 @@ def main():
                     price = offer["price"]; cur = offer["currency"]
                     if cur == "USD":
                         price = price / eurusd; cur = "EUR"
-                    if cur != "EUR":  # wir werten aktuell nur EUR aus
+                    if cur != "EUR":
                         continue
 
                     item = {
