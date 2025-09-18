@@ -1,5 +1,5 @@
 {
-  "generated": "2025-09-18T12:51:55Z",
+  "generated": "2025-09-18T14:25:13Z",
   "fx": {
     "EURUSD": 1.08
   },
@@ -34,7 +34,7 @@
   "diagnostics": {
     "totals": {
       "domains": 4,
-      "pages": 451,
+      "pages": 321,
       "products": 0,
       "offers": 0,
       "items": 0
@@ -66,11 +66,13 @@
       },
       {
         "domain": "philoro.de",
-        "pages": 220,
+        "pages": 90,
         "products": 0,
         "offers": 0,
         "items": 0,
-        "notes": []
+        "notes": [
+          "bad status: https://philoro.de/produkt/goldbarren-50-g (404)"
+        ]
       }
     ]
   }
