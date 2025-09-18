@@ -1,9 +1,13 @@
 name: vendors-fetch
 
 on:
-  schedule:
-    - cron: "0 */2 * * *"   # alle 2h
   workflow_dispatch:
+  schedule:
+    - cron: "*/30 * * * *" # alle 30 Minuten
+
+concurrency:
+  group: vendors-fetch-${{ github.ref }}
+  cancel-in-progress: false
 
 permissions:
   contents: write
@@ -11,13 +15,15 @@ permissions:
 jobs:
   fetch:
     runs-on: ubuntu-latest
+
     steps:
       - name: Checkout
         uses: actions/checkout@v4
         with:
-          fetch-depth: 1
+          persist-credentials: true
+          fetch-depth: 0
 
-      - name: Set up Python
+      - name: Setup Python
         uses: actions/setup-python@v5
         with:
           python-version: "3.11"
@@ -25,20 +31,44 @@ jobs:
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          # WICHTIG: lxml auf 4.9.x pinnen, da extruct nicht mit lxml 5.x kompatibel ist
-          pip install "lxml>=4.9.3,<5"
-          pip install httpx[http2]==0.27.2 extruct==0.16.0
-          # selectolax ist optional – nur falls du später HTML-Fallback brauchst:
-          # pip install selectolax==0.3.20
+          pip install httpx lxml extruct
 
-      - name: Run vendors fetcher
-        env:
-          GITHUB_REPOSITORY: ${{ github.repository }}
+      - name: Run vendor fetcher
         run: |
+          echo "Running scripts/vendors_fetch.py …"
           python scripts/vendors_fetch.py
+          test -f data/vendors_auto.json
+          echo "Preview diagnostics:"
+          jq '.diagnostics' data/vendors_auto.json || true
 
-      - name: Commit data changes
+      # >>>> NEU: Rebase auf Remote, um Non-Fast-Forward zu vermeiden
+      - name: Rebase onto origin/main (or reset if conflicts)
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git fetch origin main
+          set +e
+          git rebase origin/main
+          REBASE_RC=$?
+          if [ $REBASE_RC -ne 0 ]; then
+            echo "Rebase conflict – resetting to origin/main (generated file, safe to overwrite)"
+            git rebase --abort || true
+            git reset --hard origin/main
+          fi
+          set -e
+
+      - name: Commit generated file
         uses: stefanzweifel/git-auto-commit-action@v5
         with:
           commit_message: "chore(data): update vendors_auto.json"
           file_pattern: data/vendors_auto.json
+          push_options: '--force-with-lease'
+          commit_user_name: github-actions[bot]
+          commit_user_email: 41898282+github-actions[bot]@users.noreply.github.com
+          # branch: leer lassen = aktuelle Branch (main)
+
+      - name: Report build status
+        run: |
+          echo "vendors-fetch run finished."
+          echo "Generated: $(jq -r '.generated' data/vendors_auto.json || echo '-')"
+          echo "Totals: $(jq -c '.diagnostics.totals' data/vendors_auto.json || echo '{}')"
