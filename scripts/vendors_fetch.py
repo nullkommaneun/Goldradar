@@ -1,24 +1,28 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-Vendors-Autofetch – robuste Extraktion mit Bot-/Consent-Erkennung
+Vendors-Autofetch – robuste Produkt-/Preis-Extraktion mit breiten Fallbacks
 Domains: philoro.de, degussa-goldhandel.de, heubach-edelmetalle.de, proaurum.de
 
-Änderungen:
-- Realistische Browser-Header + Accept-Language (de-DE)
-- Erkennung von Consent-/Bot-Walls (Cloudflare, Consent, Captcha)
-- Erweiterte Diagnostik: pages_blocked + blocked_examples
-- Bestehende Parserpfade (JSON-LD/@graph, Offer.itemOffered, Micro/RDFa, OG, itemprop, JSON-Fallback) bleiben
+Hauptpunkte:
+- Discovery: Sitemaps + Seeds + Pfad-Heuristik (inkl. /produkt/ bei philoro)
+- Parsing: JSON-LD (@graph/Offer.itemOffered), Microdata/RDFa, OpenGraph-Product
+           + HTML-Fallback (Preistext in DOM, "price"-Klassen, €-Regex)
+- Produkt-Detail-Erkennung: H1 + Preisindikator oder strukturierte Daten
+- Diagnostik: differenzierte Zähler + Beispiel-URLs je Extraktionspfad
+- Output: data/vendors_auto.json (kompatibel zur UI)
 """
 
 from __future__ import annotations
-import json, re, time, sys
+import json, re, time, sys, argparse, textwrap
 from pathlib import Path
 from urllib.parse import urlparse
 import urllib.robotparser as robotparser
 
 import httpx
 from lxml import html
+
+# Optional: extruct für strukturierte Daten
 try:
     import extruct
     from extruct.jsonld import JsonLdExtractor
@@ -45,7 +49,7 @@ DOMAIN_SEEDS: dict[str, list[str]] = {
     ],
 }
 
-# >>> realistische Headers
+# realistische Browser-Header
 HEADERS = {
     "User-Agent": (
         "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
@@ -126,7 +130,6 @@ BLOCK_PATTERNS = (
 
 def looks_blocked(content_bytes: bytes) -> bool:
     try:
-        # grob, aber schnell: nur Anfang der Seite prüfen
         text = content_bytes[:20000].decode("utf-8", "ignore").lower()
     except Exception:
         return False
@@ -237,11 +240,29 @@ def find_candidate_urls(client: httpx.Client, domain: str) -> list[str]:
 
 # ----------------------- Structured Data Parsing --------------------------
 
-RE_PRICE_JSON = re.compile(r'"price"\s*:\s*"?(?P<price>[\d\.,]+)"?\s*[,}]', re.I)
+RE_PRICE_JSON = re.compile(r'"price"\s*:\s*"?(?P<price>[\d\.\,]+)"?\s*[,}]', re.I)
 RE_CURR_JSON  = re.compile(r'"priceCurrency"\s*:\s*"(?P<cur>[A-Z]{3})"', re.I)
 
+# generische Euro-Preis-Erkennung (Text)
+RE_EUR_PRICE_TEXT = re.compile(
+    r'(?P<val>\d{1,3}(?:\.\d{3})*(?:,\d{2})|\d+(?:,\d{2}))\s*€', re.U
+)
+
+PRICE_CLASS_HINTS = (
+    "price", "preis", "amount", "product-price", "pdp-price", "prices"
+)
+
 def parse_structured(html_bytes: bytes, base_url: str) -> dict:
-    data = {"products": [], "hints": {"jsonld":0, "micro_rdfa":0, "og":0, "itemprop":0, "json_fallback":0}}
+    """
+    Return:
+      {
+        "products": [ ... ],
+        "hints": {jsonld, micro_rdfa, og, itemprop, json_fallback, price_text},
+        "links": [...]
+      }
+    """
+    data = {"products": [], "hints": {"jsonld":0, "micro_rdfa":0, "og":0, "itemprop":0, "json_fallback":0, "price_text":0}}
+
     ext = {}
     if HAS_EXSTRUCT:
         try:
@@ -348,6 +369,28 @@ def parse_structured(html_bytes: bytes, base_url: str) -> dict:
     except Exception:
         pass
 
+    # HTML-Preistext-Fallback (generisch, vorsichtig)
+    try:
+        doc = html.fromstring(html_bytes)
+        texts = []
+        # Klassenhinweise
+        for cls in PRICE_CLASS_HINTS:
+            texts += doc.xpath(f"//*[contains(translate(@class,'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz'), '{cls}')]/text()")
+        # generisch: der gesamte sichtbare Text aus H1/Nebenbereichen nützen nichts viel – wir suchen €-Muster
+        blob = " ".join([t.strip() for t in texts if isinstance(t,str)])
+        m = RE_EUR_PRICE_TEXT.search(blob)
+        if not m:
+            # Wenn oben nichts, suche im ganzen Dokument (nur erste 50k, um Performance zu halten)
+            raw = html_bytes[:50000].decode("utf-8","ignore")
+            m = RE_EUR_PRICE_TEXT.search(raw)
+        if m:
+            val = m.group("val")
+            prod = {"@type":"Product", "name": (doc.xpath("//h1/text()") or [""])[0].strip()}
+            prod["offers"] = {"@type":"Offer", "price": val, "priceCurrency": "EUR"}
+            push_product(prod); data["hints"]["price_text"] += 1
+    except Exception:
+        pass
+
     return data
 
 # ---------------------- Normalisierung & Klassifikation --------------------
@@ -355,6 +398,7 @@ def parse_structured(html_bytes: bytes, base_url: str) -> dict:
 def as_float(x):
     try:
         if isinstance(x, str):
+            # Deutsche Schreibweise: 1.234,56
             x = x.replace(".", "").replace(",", ".").strip()
         return float(x)
     except Exception:
@@ -421,7 +465,7 @@ def best_offer(prod: dict) -> dict | None:
     cands = []
     if isinstance(offers, list):
         for o in offers:
-            cand = normalize_offer(o)
+            cand = normalize_offer(o); 
             if cand: cands.append(cand)
     elif isinstance(offers, dict):
         if offers.get("@type") == "AggregateOffer":
@@ -439,6 +483,22 @@ def best_offer(prod: dict) -> dict | None:
     if not cands: return None
     return sorted(cands, key=lambda x: x["price"])[0]
 
+# --------------------------- Produkt-Erkennung -----------------------------
+
+def looks_product_detail(doc: html.HtmlElement, parsed_hints: dict) -> bool:
+    # Signal 1: strukturierte Daten gefunden
+    if any(parsed_hints.get(k,0) for k in ("jsonld","micro_rdfa","og","itemprop","json_fallback","price_text")):
+        return True
+    # Signal 2: H1 vorhanden + irgendwo Preistext
+    h1 = (doc.xpath("//h1/text()") or [""])[0].strip()
+    if h1:
+        # Suche sichtbare Texte mit €
+        texts = [t.strip() for t in doc.xpath("//*[not(self::script)][not(self::style)]/text()") if isinstance(t,str) and "€" in t]
+        blob = " ".join(texts)[:100000]
+        if RE_EUR_PRICE_TEXT.search(blob):
+            return True
+    return False
+
 # --------------------------------- Main -----------------------------------
 
 def main():
@@ -448,7 +508,10 @@ def main():
         "products": ["bar-100g","coin-1oz-maple","coin-1oz-krugerrand","coin-1oz"],
         "vendors": [],
         "diagnostics": {
-            "totals": {"domains": 0, "pages": 0, "products": 0, "offers": 0, "items": 0, "pages_blocked": 0},
+            "totals": {
+                "domains": 0, "pages": 0, "products": 0, "offers": 0, "items": 0,
+                "pages_blocked": 0, "pages_product_like": 0, "pages_with_price_text": 0
+            },
             "domains": []
         }
     }
@@ -467,9 +530,9 @@ def main():
         for domain in WHITELIST:
             dstat = {
                 "domain": domain, "pages": 0, "products": 0, "offers": 0, "items": 0, "notes": [],
-                "pages_with_jsonld": 0, "pages_with_micro": 0, "pages_with_og": 0, "pages_with_fallback": 0,
-                "pages_blocked": 0,
-                "examples": {"jsonld": [], "micro": [], "og": [], "fallback": [], "blocked": []}
+                "pages_with_jsonld": 0, "pages_with_micro": 0, "pages_with_og": 0, "pages_with_itemprop": 0,
+                "pages_with_json_fallback": 0, "pages_with_price_text": 0, "pages_blocked": 0, "pages_product_like": 0,
+                "examples": {"jsonld": [], "micro": [], "og": [], "itemprop": [], "json_fallback": [], "price_text": [], "blocked": [], "product_like": []}
             }
             out["diagnostics"]["domains"].append(dstat)
             out["diagnostics"]["totals"]["domains"] += 1
@@ -492,43 +555,57 @@ def main():
                     dstat["notes"].append(f"bad status: {u} ({getattr(r,'status_code',None)})")
                     continue
 
-                # Consent/Bot-Wall?
                 if looks_blocked(r.content):
                     dstat["pages_blocked"] += 1
                     out["diagnostics"]["totals"]["pages_blocked"] += 1
                     if len(dstat["examples"]["blocked"]) < 3:
                         dstat["examples"]["blocked"].append(u)
-                    # trotzdem zählen wir die Seite, aber ohne Parsing
                     dstat["pages"] += 1
                     continue
 
                 dstat["pages"] += 1
 
                 parsed = parse_structured(r.content, u)
-                products = parsed.get("products") or []
                 hints = parsed.get("hints") or {}
-                if hints.get("jsonld"): 
+                doc = html.fromstring(r.content)
+
+                # Hints + Beispiele
+                if hints.get("jsonld"):
                     dstat["pages_with_jsonld"] += 1
                     if len(dstat["examples"]["jsonld"]) < 3: dstat["examples"]["jsonld"].append(u)
-                if hints.get("micro_rdfa"): 
+                if hints.get("micro_rdfa"):
                     dstat["pages_with_micro"] += 1
                     if len(dstat["examples"]["micro"]) < 3: dstat["examples"]["micro"].append(u)
-                if hints.get("og"): 
+                if hints.get("og"):
                     dstat["pages_with_og"] += 1
                     if len(dstat["examples"]["og"]) < 3: dstat["examples"]["og"].append(u)
-                if hints.get("itemprop") or hints.get("json_fallback"):
-                    dstat["pages_with_fallback"] += 1
-                    if len(dstat["examples"]["fallback"]) < 3: dstat["examples"]["fallback"].append(u)
+                if hints.get("itemprop"):
+                    dstat["pages_with_itemprop"] += 1
+                    if len(dstat["examples"]["itemprop"]) < 3: dstat["examples"]["itemprop"].append(u)
+                if hints.get("json_fallback"):
+                    dstat["pages_with_json_fallback"] += 1
+                    if len(dstat["examples"]["json_fallback"]) < 3: dstat["examples"]["json_fallback"].append(u)
+                if hints.get("price_text"):
+                    dstat["pages_with_price_text"] += 1
+                    out["diagnostics"]["totals"]["pages_with_price_text"] += 1
+                    if len(dstat["examples"]["price_text"]) < 3: dstat["examples"]["price_text"].append(u)
 
-                dstat["products"] += len(products)
+                # Produkt-Detail-Heuristik
+                if looks_product_detail(doc, hints):
+                    dstat["pages_product_like"] += 1
+                    out["diagnostics"]["totals"]["pages_product_like"] += 1
+                    if len(dstat["examples"]["product_like"]) < 3:
+                        dstat["examples"]["product_like"].append(u)
 
-                # ItemList-Fanout begrenzen
+                products = parsed.get("products") or []
+
+                # geringes Fanout von ItemList-Links
                 for link in (parsed.get("links") or [])[:6]:
                     if link in seen: continue
                     if not robots_ok(domain, link): continue
                     r2 = fetch(client, link); time.sleep(REQ_DELAY)
                     seen.add(link)
-                    if not (r2 and r2.status_code==200 and r2.content): 
+                    if not (r2 and r2.status_code==200 and r2.content):
                         continue
                     if looks_blocked(r2.content):
                         dstat["pages_blocked"] += 1
@@ -537,38 +614,62 @@ def main():
                             dstat["examples"]["blocked"].append(link)
                         dstat["pages"] += 1
                         continue
-
                     dstat["pages"] += 1
                     parsed2 = parse_structured(r2.content, link)
-                    ps = parsed2.get("products") or []
                     hints2 = parsed2.get("hints") or {}
-                    if hints2.get("jsonld"): 
+                    if hints2.get("jsonld"):
                         dstat["pages_with_jsonld"] += 1
                         if len(dstat["examples"]["jsonld"]) < 3: dstat["examples"]["jsonld"].append(link)
-                    if hints2.get("micro_rdfa"): 
+                    if hints2.get("micro_rdfa"):
                         dstat["pages_with_micro"] += 1
                         if len(dstat["examples"]["micro"]) < 3: dstat["examples"]["micro"].append(link)
-                    if hints2.get("og"): 
+                    if hints2.get("og"):
                         dstat["pages_with_og"] += 1
                         if len(dstat["examples"]["og"]) < 3: dstat["examples"]["og"].append(link)
-                    if hints2.get("itemprop") or hints2.get("json_fallback"):
-                        dstat["pages_with_fallback"] += 1
-                        if len(dstat["examples"]["fallback"]) < 3: dstat["examples"]["fallback"].append(link)
+                    if hints2.get("itemprop"):
+                        dstat["pages_with_itemprop"] += 1
+                        if len(dstat["examples"]["itemprop"]) < 3: dstat["examples"]["itemprop"].append(link)
+                    if hints2.get("json_fallback"):
+                        dstat["pages_with_json_fallback"] += 1
+                        if len(dstat["examples"]["json_fallback"]) < 3: dstat["examples"]["json_fallback"].append(link)
+                    if hints2.get("price_text"):
+                        dstat["pages_with_price_text"] += 1
+                        out["diagnostics"]["totals"]["pages_with_price_text"] += 1
+                        if len(dstat["examples"]["price_text"]) < 3: dstat["examples"]["price_text"].append(link)
 
-                    dstat["products"] += len(ps)
-                    products.extend(ps)
+                    products.extend(parsed2.get("products") or [])
 
+                dstat["products"] += len(products)
+
+                # Produkte in Items umsetzen
                 for prod in products:
                     name = (prod.get("name") or "").strip()
-                    if not name: continue
+                    if not name:
+                        # try OG title
+                        name = (doc.xpath('//meta[@property="og:title"]/@content') or [""])[0].strip()
+
+                    if not name:
+                        continue
+
                     w_g = extract_weight_g(prod)
                     cls = classify_product(name, w_g)
-                    if not cls: continue
-                    offer = best_offer(prod)
-                    if not offer: continue
-                    dstat["offers"] += 1
+                    if not cls:
+                        # Toleranz: 100g im Namen ohne "Barren" trotzdem als 100g werten
+                        if w_g and 95 <= w_g <= 105:
+                            cls = "bar-100g"
+                        else:
+                            continue
 
+                    offer = best_offer(prod)
+                    if not offer:
+                        # Fallback: wenn wir im price_text getroffen haben, vorher in parse_structured bereits gesetzt
+                        offer = normalize_offer(prod.get("offers") or {})
+                        if not offer:
+                            continue
+
+                    dstat["offers"] += 1
                     price = offer["price"]; cur = offer["currency"]
+
                     # USD → EUR
                     if cur == "USD":
                         price = price / eurusd; cur = "EUR"
@@ -596,19 +697,32 @@ def main():
 
                     vendor["items"].append(item)
 
-            # bestes Angebot je Produkt
+            # bestes Angebot je Produkt (pro Vendor)
             best = {}
             for it in vendor["items"]:
                 p = it["product"]
-                if p not in best or (it.get("premium") is not None and (best[p].get("premium") is None or it["premium"] < best[p]["premium"])):
+                if p not in best:
                     best[p] = it
+                else:
+                    # bevorzugt kleinstes Premium; sonst kleinster Preis
+                    a, b = best[p], it
+                    pa = a.get("premium"); pb = b.get("premium")
+                    if pa is None and pb is not None:
+                        best[p] = b
+                    elif pa is not None and pb is not None and pb < pa:
+                        best[p] = b
+                    elif pa is None and pb is None and b["price"]["value"] < a["price"]["value"]:
+                        best[p] = b
+
             vendor["items"] = list(best.values())
 
             dstat["items"] += len(vendor["items"])
-            out["diagnostics"]["totals"]["pages"]         += dstat["pages"]
-            out["diagnostics"]["totals"]["products"]      += dstat["products"]
-            out["diagnostics"]["totals"]["offers"]        += dstat["offers"]
-            out["diagnostics"]["totals"]["items"]         += dstat["items"]
+            out["diagnostics"]["totals"]["pages"]              += dstat["pages"]
+            out["diagnostics"]["totals"]["products"]           += dstat["products"]
+            out["diagnostics"]["totals"]["offers"]             += dstat["offers"]
+            out["diagnostics"]["totals"]["items"]              += dstat["items"]
+            out["diagnostics"]["totals"]["pages_blocked"]      += dstat["pages_blocked"]
+            out["diagnostics"]["totals"]["pages_product_like"] += dstat["pages_product_like"]
 
             out["vendors"].append(vendor)
 
@@ -616,39 +730,38 @@ def main():
     print("Wrote data/vendors_auto.json with", len(out["vendors"]), "vendors")
     print("Diagnostics:", json.dumps(out["diagnostics"], ensure_ascii=False))
 
-if __name__ == "__main__":
-    import argparse, sys, textwrap
+# ------------------------------ Testmodus ---------------------------------
 
 def run_testmode(url: str):
-    import httpx, extruct, lxml.html
     print(f"[TEST] Fetching {url}")
-    headers = {"user-agent": "Mozilla/5.0 (compatible; Goldradar/1.0)"}
-    with httpx.Client(http2=True, headers=headers, follow_redirects=True, timeout=30) as client:
-        resp = client.get(url)
-        print(f"[TEST] Status: {resp.status_code}, Length={len(resp.text)}")
-        if "consent" in resp.text.lower():
-            print("[TEST] Consent wall detected")
-        tree = lxml.html.fromstring(resp.text)
-        data = extruct.extract(resp.text, base_url=url)
-        for k, v in data.items():
-            if v:
-                print(f"[TEST] Found {len(v)} {k} entries")
-                for entry in v[:1]:
-                    snippet = str(entry)
-                    print("[TEST] Example:", textwrap.shorten(snippet, width=200))
-        og_title = tree.xpath("//meta[@property='og:title']/@content")
-        og_price = tree.xpath("//meta[@property='product:price:amount']/@content")
-        if og_title:
-            print("[TEST] og:title =", og_title[0])
-        if og_price:
-            print("[TEST] og:price =", og_price[0])
+    with httpx.Client(http2=True, headers=HEADERS, follow_redirects=True, timeout=30) as client:
+        r = fetch(client, url)
+        if not r:
+            print("[TEST] no response"); return
+        print(f"[TEST] Status={r.status_code} bytes={len(r.content)}")
+        if looks_blocked(r.content):
+            print("[TEST] Consent/Bot-Wall erkannt")
+        parsed = parse_structured(r.content, url)
+        hints = parsed.get("hints", {})
+        print("[TEST] Hints:", hints)
+        doc = html.fromstring(r.content)
+        print("[TEST] H1:", (doc.xpath("//h1/text()") or [""])[0].strip()[:140])
+        is_detail = looks_product_detail(doc, hints)
+        print("[TEST] looks_product_detail:", is_detail)
+        # Zeige ersten Preis, falls vorhanden
+        for prod in parsed.get("products") or []:
+            off = best_offer(prod)
+            if not off:
+                off = normalize_offer(prod.get("offers") or {})
+            if off:
+                print("[TEST] OFFER:", off)
+                break
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--test", help="Test a single product URL")
-    args, unknown = parser.parse_known_args()
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--test", help="Test a single product URL")
+    args = ap.parse_args()
     if args.test:
         run_testmode(args.test)
         sys.exit(0)
-    main()
     main()
