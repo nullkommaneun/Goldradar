@@ -11,6 +11,7 @@
   --neu:#596573;
   --accent:#55b5ff;
 
+  /* Typo/Spacing Scale (mobile-first) */
   --fs-xs: clamp(12px, 1.6vw, 13px);
   --fs-sm: clamp(14px, 1.9vw, 15px);
   --fs-md: clamp(16px, 2.2vw, 17px);
@@ -106,17 +107,14 @@ body{
   min-height:44px;
 }
 
-/* ====== Driver-Gruppen ====== */
+/* ====== Driver-Zeilen ====== */
 .driver-group{margin-top:var(--space-2)}
 .group-title{
-  display:flex; align-items:center; gap:8px;
   margin:var(--space-2) 0 var(--space-1);
   font-size:var(--fs-md);
   color:#d9e2ea;
   font-weight:700;
 }
-.group-title .dot{width:10px;height:10px}
-
 .driver{
   display:flex;justify-content:space-between;align-items:center;
   gap:var(--space-2);
@@ -131,31 +129,22 @@ body{
 .driver .msg{font-size:var(--fs-sm)}
 .driver .msg strong{display:block;font-size:var(--fs-md);margin-bottom:2px}
 
-/* Info-Icon */
-.info{
-  display:inline-flex; align-items:center; justify-content:center;
-  width:24px; height:24px; min-width:24px; min-height:24px;
-  border-radius:50%; border:1px solid #22313b; color:var(--muted);
-  font-size:12px; font-weight:700; cursor:help;
-  margin-left:4px;
-}
-
-/* ====== Form (Portfolio) ====== */
-.form-row{display:grid; grid-template-columns: 1fr; gap:var(--space-2); margin-bottom:var(--space-2)}
-.form-label{font-size:var(--fs-sm); color:var(--muted)}
-.form-input-wrap{position:relative; display:flex; align-items:center; gap:8px}
-.input{
-  width:100%; background:#0e1317; color:var(--ink);
-  border:1px solid var(--line); border-radius:10px; min-height:48px;
-  padding:0 42px 0 12px; font-size:var(--fs-md); outline:none;
-}
-.input:focus{border-color:#22313b; box-shadow:0 0 0 2px rgba(85,181,255,0.15)}
-.input-suffix{position:absolute; right:10px; pointer-events:none; color:var(--muted); font-size:var(--fs-sm)}
-.kpi--portfolio{border:1px solid var(--line); border-radius:10px; padding:var(--space-2)}
-
 /* Legende */
-.legend{display:flex;gap:var(--space-2);flex-wrap:wrap; margin-top:var(--space-2); font-size:var(--fs-xs);color:var(--muted)}
+.legend{
+  display:flex;gap:var(--space-2);flex-wrap:wrap;
+  margin-top:var(--space-2);
+  font-size:var(--fs-xs);color:var(--muted)
+}
 .legend-item{display:inline-flex;align-items:center;gap:6px}
+
+/* ====== Hinweise & Footer ====== */
+.hint{border-left:3px solid var(--neu);padding-left:var(--space-2);margin-top:var(--space-2)}
+.band{font-size:var(--fs-sm);color:var(--muted)}
+.footer{color:var(--muted);font-size:var(--fs-xs);margin-top:var(--space-2)}
+
+/* ====== Links ====== */
+a{color:var(--accent);text-decoration:none}
+a:hover{text-decoration:underline}
 
 /* ====== Diagnose (collapsible) ====== */
 .diag-details{margin-top:var(--space-2)}
@@ -167,103 +156,7 @@ body{
 }
 .diag{margin-top:var(--space-2);padding:var(--space-2);border-radius:10px;background:#0e1317;border:1px solid #1a2430;font-size:var(--fs-xs);color:#c9d3dc;white-space:pre-wrap}
 
-/* ====== Skeleton Loading ====== */
-@keyframes shimmer {
-  0% { background-position: -200% 0; }
-  100% { background-position: 200% 0; }
-}
-.skeleton{
-  position:relative; overflow:hidden; border-color:#17222b !important; background:#0c1216 !important;
-}
-.skeleton .skeleton-bar{
-  width:60%; height:14px; border-radius:8px;
-  background: linear-gradient(90deg, #0f161b 25%, #1a2630 50%, #0f161b 75%);
-  background-size: 200% 100%;
-  animation: shimmer 1.2s infinite linear;
-}
-body.is-loading .skeleton { opacity: 1; }
-body:not(.is-loading) .skeleton { display: none; }
-
 /* ====== Accessibility ====== */
 @media (prefers-reduced-motion: reduce){
   *{animation:none!important;transition:none!important}
   }
-/* ...bestehende Styles bleiben unverändert... */
-
-/* Info-Icon */
-.info{
-  display:inline-flex; align-items:center; justify-content:center;
-  width:28px; height:28px; min-width:28px; min-height:28px;
-  border-radius:50%; border:1px solid #22313b; color:var(--muted);
-  font-size:12px; font-weight:700; background:transparent;
-  margin-left:4px; cursor:pointer;
-}
-.info:focus-visible{ outline:2px solid rgba(85,181,255,.5); outline-offset:2px }
-
-/* Tooltip-Popover */
-.tooltip {
-  position: fixed; z-index: 50;
-  max-width: 90vw; width: min(320px, 90vw);
-  background: #0f1419;
-  border: 1px solid #1b2731;
-  color: var(--ink);
-  border-radius: 10px;
-  padding: 10px 12px;
-  box-shadow: 0 8px 30px rgba(0,0,0,.5);
-  font-size: var(--fs-sm);
-}
-.tooltip[data-pos="top"]::after,
-.tooltip[data-pos="bottom"]::after{
-  content:"";
-  position:absolute; left:16px;
-  border:8px solid transparent;
-}
-.tooltip[data-pos="top"]::after{
-  bottom:-16px; border-top-color:#1b2731;
-}
-.tooltip[data-pos="bottom"]::after{
-  top:-16px; border-bottom-color:#1b2731;
-}
-
-/* Skeletons usw. bleiben wie in deiner aktuellen Datei */
-
-/* … dein vorhandenes CSS bleibt bestehen … */
-
-/* Select */
-.select{
-  width:100%;
-  background:#0e1317;
-  color:var(--ink);
-  border:1px solid var(--line);
-  border-radius:10px;
-  min-height:44px;
-  padding:0 var(--space-2);
-  font-size:var(--fs-md);
-}
-
-/* Vendor-Liste */
-.vendor-toolbar{
-  display:grid; grid-template-columns: 1fr 1fr; gap:var(--space-2);
-  margin-bottom: var(--space-2);
-}
-.vendors-list{
-  display:grid; gap: var(--space-2);
-}
-.vendor-card{
-  display:flex; justify-content:space-between; align-items:center;
-  gap: var(--space-2);
-  padding: var(--space-2);
-  border:1px solid var(--line);
-  background:#0e1317; border-radius:10px;
-}
-.vendor-card .info-line{ color:var(--muted); font-size: var(--fs-sm); }
-.vendor-actions{display:flex; gap: 8px; align-items:center}
-.btn{
-  display:inline-flex; align-items:center; justify-content:center;
-  min-height:36px; padding:0 12px; border-radius:10px; border:1px solid #21303a;
-  color:var(--ink); background:#0f161b; text-decoration:none;
-}
-.btn:hover{ text-decoration:none; background:#12202a; }
-.prem.green{ color: var(--ok); border-color: var(--ok); }
-.prem.yellow{ color: var(--warn); border-color: var(--warn); }
-.prem.red{ color: var(--bad); border-color: var(--bad); }

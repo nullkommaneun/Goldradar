@@ -1,48 +1,81 @@
 <!doctype html>
 <html lang="de">
 <head>
-  <meta charset="utf-8"/>
-  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <title>Gold-Kauf-Signal</title>
-  <link rel="stylesheet" href="style.css"/>
+  <link rel="stylesheet" href="style.css">
 </head>
-<body class="dark">
-  <header class="appbar">
-    <div class="brand">Gold-Kauf-Signal</div>
-    <div id="spotHeader" class="muted"></div>
+<body>
+  <header role="banner" class="site-header">
+    <div class="wrap header-wrap">
+      <div class="brand">
+        <span class="dot dot--brand" aria-hidden="true"></span>
+        <h1 class="brand-title">Gold-Kauf-Signal</h1>
+      </div>
+      <span id="sig-text" class="pill pill--lg" aria-live="polite">Lade Daten …</span>
+      <span id="sig-dot" class="dot neutral" aria-hidden="true"></span>
+    </div>
   </header>
 
-  <main class="container">
+  <main class="wrap" role="main">
+    <div class="grid">
+      <section class="card" aria-labelledby="sec-forecast">
+        <h2 id="sec-forecast" class="title">Wohin geht Gold?</h2>
+        <div class="muted" id="spotline">Spot: —</div>
+        <div id="forecast" class="list list--kpi" aria-live="polite"></div>
+        <div class="footer band" id="trendnote">Berechnung: 60-Tage-Trend (log-Returns) mit Unsicherheitsband.</div>
+      </section>
 
-    <section class="card">
-      <h3>Dein Goldbestand</h3>
-      <p>Gib deinen Bestand in Gramm ein. Wir berechnen den aktuellen Wert in <strong>USD (Spot: USD/oz)</strong>.</p>
-      <div class="row">
-        <label for="portfolioGrams" class="lbl">Bestand</label>
-        <input id="portfolioGrams" type="number" min="0" step="0.01" inputmode="decimal"/>
-        <span class="suffix">g</span>
-      </div>
-      <div class="row">
-        <span class="lbl">Aktueller Wert</span>
-        <span id="portfolioValue" class="badge">—</span>
-      </div>
-      <p class="muted">Preisquelle: stooq (XAUUSD, USD pro Unze). Umrechnung: 1 oz = 31,1034768 g.</p>
-    </section>
+      <section class="card" aria-labelledby="sec-why">
+        <h2 id="sec-why" class="title">Das bewegt den Goldpreis gerade</h2>
+        <p class="muted subline">
+          Hier siehst du die wichtigsten Marktkräfte und ob sie deinem Goldpreis helfen oder schaden.
+        </p>
 
-    <section class="card">
-      <h3>Wohin geht Gold?</h3>
-      <p class="muted">Berechnung: 60-Tage-Trend (log-Returns) mit Unsicherheitsband.</p>
-      <div id="forecastArea">—</div>
-    </section>
+        <div class="driver-group">
+          <h3 class="group-title">Geld &amp; Zinsen</h3>
+          <div class="list" id="grp-rates" aria-live="polite"></div>
+        </div>
 
-    <section class="card">
-      <h3>System</h3>
-      <pre id="diag" class="diag"></pre>
-      <div id="systemStatus" class="muted"></div>
-    </section>
+        <div class="driver-group">
+          <h3 class="group-title">Märkte &amp; Risiko</h3>
+          <div class="list" id="grp-risk" aria-live="polite"></div>
+        </div>
 
+        <div class="driver-group">
+          <h3 class="group-title">Konjunktur &amp; Rohstoffe</h3>
+          <div class="list" id="grp-real" aria-live="polite"></div>
+        </div>
+
+        <div class="legend">
+          <span class="legend-item"><span class="dot green"></span> Rückenwind</span>
+          <span class="legend-item"><span class="dot yellow"></span> Neutral</span>
+          <span class="legend-item"><span class="dot red"></span> Gegenwind</span>
+        </div>
+
+        <div class="hint" id="drivers-sum">In Summe: —</div>
+      </section>
+
+      <section class="card card--full" aria-labelledby="sec-analog">
+        <h2 id="sec-analog" class="title">Historischer Vergleich</h2>
+        <div id="analogs" class="list"></div>
+        <div class="footer">Methode: Cosine-Similarity über Treibervektor (normiert).</div>
+      </section>
+
+      <section class="card card--full" aria-labelledby="sec-system">
+        <h2 id="sec-system" class="title">System</h2>
+        <!-- Diese Zeile wird von app.js dynamisch gefüllt -->
+        <div class="muted" id="system-info">Datenquelle: FRED, stooq</div>
+        <details class="diag-details">
+          <summary class="diag-summary">Diagnose</summary>
+          <pre class="diag" id="diag">Diag: –</pre>
+        </details>
+      </section>
+    </div>
   </main>
 
+  <script src="preflight.js"></script>
   <script src="app.js"></script>
 </body>
 </html>
