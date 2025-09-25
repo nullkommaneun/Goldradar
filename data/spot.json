@@ -1,9 +1,9 @@
 {
-  "timestamp": "2025-09-25T20:22:59Z",
-  "XAUUSD": 3749.465,
+  "timestamp": "2025-09-25T22:17:24Z",
+  "XAUUSD": 3747.205,
   "source": "stooq.com (XAUUSD daily close)",
-  "spot_date": "2025-09-25",
-  "usd_per_ounce": 3749.465,
-  "usd_per_gram": 120.548099,
-  "usd_per_kg": 120548.1
+  "spot_date": "2025-09-26",
+  "usd_per_ounce": 3747.205,
+  "usd_per_gram": 120.475438,
+  "usd_per_kg": 120475.44
 }
