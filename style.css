@@ -11,6 +11,7 @@ body {
 .container {
     max-width: 700px;
     width: 100%;
+    padding-bottom: 50px; /* Abstand am unteren Rand */
 }
 
 header {
@@ -138,9 +139,68 @@ h2 {
     color: #adb5bd;
 }
 
+/* Footer & Diagnose-Button */
 footer {
     text-align: center;
     font-size: 0.8rem;
     color: #6c757d;
     margin-top: 30px;
 }
+
+#toggle-diagnostics {
+    margin-top: 15px;
+    background-color: #6c757d;
+    color: white;
+    border: none;
+    padding: 10px 20px;
+    border-radius: 8px;
+    cursor: pointer;
+    font-size: 0.9rem;
+}
+
+#toggle-diagnostics:hover {
+    background-color: #495057;
+}
+
+/* NEU: Diagnosepanel (Overlay) Styles */
+#diagnostics-panel {
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    background-color: #1c1e21;
+    color: #f0f2f5;
+    padding: 20px;
+    box-shadow: 0 -5px 20px rgba(0, 0, 0, 0.5);
+    font-family: monospace;
+    font-size: 0.85rem;
+    max-height: 50vh; /* Maximal 50% der Bildschirmhöhe */
+    overflow-y: auto;
+    transition: transform 0.3s ease-in-out;
+    z-index: 1000;
+}
+
+.diagnostics-hidden {
+    /* Verstecken durch Verschieben nach unten */
+    transform: translateY(100%);
+}
+
+#diagnostics-log {
+    background-color: #2d3748;
+    padding: 15px;
+    border-radius: 5px;
+    margin-top: 10px;
+}
+
+.log-entry {
+    padding: 4px 0;
+    border-bottom: 1px solid #4a5568;
+    /* Wichtig für lange API-Antworten (z.B. JSON-Details) */
+    word-wrap: break-word;
+    white-space: pre-wrap;
+}
+
+/* Log Farben */
+.log-info { color: #4299e1; }
+.log-success { color: #48bb78; }
+.log-error { color: #f56565; font-weight: bold; }
