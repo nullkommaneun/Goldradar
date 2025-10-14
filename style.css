@@ -1,0 +1,146 @@
+body {
+    font-family: 'Inter', sans-serif;
+    background-color: #f0f2f5;
+    color: #1c1e21;
+    margin: 0;
+    padding: 20px;
+    display: flex;
+    justify-content: center;
+}
+
+.container {
+    max-width: 700px;
+    width: 100%;
+}
+
+header {
+    text-align: center;
+    margin-bottom: 20px;
+}
+
+h1 {
+    margin: 0;
+    font-weight: 700;
+    color: #003366;
+}
+
+header p {
+    color: #6c757d;
+}
+
+h2 {
+    color: #003366;
+    font-weight: 600;
+    margin-top: 0;
+    margin-bottom: 15px;
+    border-bottom: 1px solid #e9ecef;
+    padding-bottom: 10px;
+}
+
+.card {
+    background: #fff;
+    border-radius: 12px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+    padding: 25px;
+    margin-bottom: 20px;
+}
+
+/* Price Section */
+.price-section {
+    text-align: center;
+}
+
+.price-display {
+    font-size: 3.5rem;
+    font-weight: 700;
+    color: #DAA520; /* Gold Farbe */
+}
+
+.currency {
+    font-size: 1.5rem;
+    color: #6c757d;
+}
+
+.status {
+    font-size: 0.9rem;
+    color: #adb5bd;
+    margin-top: 15px;
+}
+
+/* Factors Section */
+.factor-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 15px 0;
+    border-bottom: 1px solid #e9ecef;
+}
+
+.factor-item:last-child {
+    border-bottom: none;
+}
+
+.factor-name {
+    font-weight: 400;
+}
+
+.factor-data {
+    text-align: right;
+}
+
+.factor-value {
+    font-weight: 600;
+    display: block;
+}
+
+.factor-impact {
+    font-size: 0.85rem;
+    font-weight: 500;
+}
+
+.info-note {
+    font-size: 0.8rem;
+    color: #adb5bd;
+    margin-top: 20px;
+}
+
+/* Indikatoren Farben */
+.positive { color: #28a745; } /* Gut für Gold (Bullish) */
+.negative { color: #dc3545; } /* Schlecht für Gold (Bearish) */
+.neutral { color: #6c757d; }
+
+/* Assessment Section */
+#assessment-result {
+    padding: 15px;
+    border-radius: 8px;
+    font-weight: 600;
+}
+
+.assessment-buy {
+    background-color: #d4edda;
+    border: 1px solid #c3e6cb;
+    color: #155724;
+}
+
+.assessment-wait {
+    background-color: #fff3cd;
+    border: 1px solid #ffeeba;
+    color: #856404;
+}
+
+.assessment-caution {
+    background-color: #f8d7da;
+    border: 1px solid #f5c6cb;
+    color: #721c24;
+}
+
+.assessment-loading {
+    color: #adb5bd;
+}
+
+footer {
+    text-align: center;
+    font-size: 0.8rem;
+    color: #6c757d;
+    margin-top: 30px;
+}
