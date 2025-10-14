@@ -222,3 +222,20 @@ footer {
 .log-info { color: #4299e1; }
 .log-success { color: #48bb78; }
 .log-error { color: #f56565; font-weight: bold; }
+
+/* Fügen Sie dies am Ende Ihrer style.css Datei hinzu */
+
+/* NEU: Stil für die Anzeige von veralteten (gecachten) Daten */
+.stale-data-indicator {
+    font-size: 0.75rem;
+    font-style: italic;
+    color: var(--text-color-secondary);
+    margin-left: 8px;
+}
+
+.factor-data .stale-data-indicator {
+    display: block; /* Sorgt für korrekte Anzeige im Faktoren-Bereich */
+    text-align: right;
+    margin-left: 0;
+    margin-top: 2px;
+}
