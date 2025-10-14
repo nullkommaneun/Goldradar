@@ -1,5 +1,5 @@
 // WICHTIG: Fügen Sie hier Ihren Alpha Vantage API Schlüssel ein
-const API_KEY = 'DEIN_API_SCHLUESSEL_HIER';
+const API_KEY = '547GHY3CRL7BKWPC';
 
 document.addEventListener('DOMContentLoaded', () => {
     setupDiagnostics();
