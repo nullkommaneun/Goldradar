@@ -1,11 +1,15 @@
 <!DOCTYPE html>
-<html lang="de">
+<html lang="de-DE">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>GoldInvest Radar</title>
+    <meta name="description" content="Live-Analyse von Einflussfaktoren auf den Goldpreis.">
+    
     <link rel="stylesheet" href="style.css">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&display=swap" rel="stylesheet">
+    
+    <script src="app.js" defer></script>
 </head>
 <body>
     <div class="container">
@@ -15,7 +19,7 @@
         </header>
 
         <main>
-            <section class="price-section card">
+            <section class="price-section card" aria-live="polite">
                 <h2>Aktueller Goldpreis</h2>
                 <div class="price-display">
                     <span id="gold-price">--.--</span>
@@ -33,7 +37,7 @@
                  <p class="info-note">Hinweis: Ökonomische Daten (Inflation, Zinsen, VXX-Proxy) beziehen sich auf den US-Markt (via Alpha Vantage), da dieser den globalen Goldpreis maßgeblich beeinflusst.</p>
             </section>
 
-             <section class="assessment-section card">
+             <section class="assessment-section card" aria-live="assertive">
                 <h2>Bewertung</h2>
                 <div id="assessment-result" class="assessment-loading">
                     <p>Analyse der Marktdaten läuft...</p>
@@ -43,15 +47,14 @@
 
         <footer>
             <p>Daten bereitgestellt durch Alpha Vantage. Dies stellt keine Anlageberatung dar.</p>
-            <button id="toggle-diagnostics">Diagnosepanel anzeigen</button>
+            <button id="toggle-diagnostics" aria-controls="diagnostics-panel" aria-expanded="false">Diagnosepanel anzeigen</button>
         </footer>
     </div>
 
-    <div id="diagnostics-panel" class="diagnostics-hidden">
-        <h3>System- & API-Diagnose</h3>
+    <div id="diagnostics-panel" class="diagnostics-hidden" role="region" aria-labelledby="diagnostics-title">
+        <h3 id="diagnostics-title">System- & API-Diagnose</h3>
         <div id="diagnostics-log"></div>
     </div>
 
-    <script src="app.js"></script>
-</body>
+    </body>
 </html>
