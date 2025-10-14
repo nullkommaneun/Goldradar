@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GoldInvest Radar</title>
+    <link rel="stylesheet" href="style.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&display=swap" rel="stylesheet">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>GoldInvest Radar</h1>
+            <p>Analyse basierend auf Livedaten</p>
+        </header>
+
+        <main>
+            <section class="price-section card">
+                <h2>Aktueller Goldpreis</h2>
+                <div class="price-display">
+                    <span id="gold-price">--.--</span>
+                    <span class="currency">€ / Gramm</span>
+                </div>
+                <p class="status" id="status-message">Daten werden geladen...</p>
+            </section>
+
+            <section class="factors-section card">
+                <h2>Einflussfaktoren (Livedaten)</h2>
+                <div id="factors-container">
+                    <p>Indikatoren werden abgerufen...</p>
+                </div>
+                 <p class="info-note">Hinweis: Ökonomische Daten (Inflation, Zinsen, VIX) beziehen sich auf den US-Markt (via Alpha Vantage), da dieser den globalen Goldpreis maßgeblich beeinflusst.</p>
+            </section>
+
+             <section class="assessment-section card">
+                <h2>Bewertung</h2>
+                <div id="assessment-result" class="assessment-loading">
+                    <p>Analyse der Marktdaten läuft...</p>
+                </div>
+            </section>
+        </main>
+
+        <footer>
+            <p>Daten bereitgestellt durch Alpha Vantage. Dies stellt keine Anlageberatung dar. API-Limits können die Verfügbarkeit einschränken.</p>
+        </footer>
+    </div>
+
+    <script src="app.js"></script>
+</body>
+</html>
