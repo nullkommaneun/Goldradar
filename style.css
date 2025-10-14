@@ -1,7 +1,24 @@
+/* HINWEIS: CSS-Variablen im :root definieren. Das macht das Ändern von Farben
+   oder Schriftarten an einer zentralen Stelle möglich ("future-proof"). */
+:root {
+    --primary-bg-color: #f0f2f5;
+    --card-bg-color: #fff;
+    --text-color-primary: #1c1e21;
+    --text-color-secondary: #6c757d;
+    --text-color-muted: #adb5bd;
+    --header-color: #003366;
+    --gold-color: #DAA520;
+    --positive-color: #28a745;
+    --negative-color: #dc3545;
+    --font-main: 'Inter', sans-serif;
+    --border-color: #e9ecef;
+    --shadow-color: rgba(0, 0, 0, 0.05);
+}
+
 body {
-    font-family: 'Inter', sans-serif;
-    background-color: #f0f2f5;
-    color: #1c1e21;
+    font-family: var(--font-main);
+    background-color: var(--primary-bg-color);
+    color: var(--text-color-primary);
     margin: 0;
     padding: 20px;
     display: flex;
@@ -11,7 +28,8 @@ body {
 .container {
     max-width: 700px;
     width: 100%;
-    padding-bottom: 50px; /* Abstand am unteren Rand */
+    /* HINWEIS: 'padding-block-end' ist die logische Eigenschaft für 'padding-bottom' */
+    padding-block-end: 50px;
 }
 
 header {
@@ -22,26 +40,26 @@ header {
 h1 {
     margin: 0;
     font-weight: 700;
-    color: #003366;
+    color: var(--header-color);
 }
 
 header p {
-    color: #6c757d;
+    color: var(--text-color-secondary);
 }
 
 h2 {
-    color: #003366;
+    color: var(--header-color);
     font-weight: 600;
     margin-top: 0;
     margin-bottom: 15px;
-    border-bottom: 1px solid #e9ecef;
+    border-bottom: 1px solid var(--border-color);
     padding-bottom: 10px;
 }
 
 .card {
-    background: #fff;
+    background: var(--card-bg-color);
     border-radius: 12px;
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+    box-shadow: 0 4px 12px var(--shadow-color);
     padding: 25px;
     margin-bottom: 20px;
 }
@@ -52,19 +70,19 @@ h2 {
 }
 
 .price-display {
-    font-size: 3.5rem;
+    font-size: clamp(2.5rem, 10vw, 3.5rem); /* HINWEIS: 'clamp' für responsive Schriftgröße */
     font-weight: 700;
-    color: #DAA520; /* Gold Farbe */
+    color: var(--gold-color);
 }
 
 .currency {
-    font-size: 1.5rem;
-    color: #6c757d;
+    font-size: clamp(1.2rem, 5vw, 1.5rem);
+    color: var(--text-color-secondary);
 }
 
 .status {
     font-size: 0.9rem;
-    color: #adb5bd;
+    color: var(--text-color-muted);
     margin-top: 15px;
 }
 
@@ -74,7 +92,7 @@ h2 {
     justify-content: space-between;
     align-items: center;
     padding: 15px 0;
-    border-bottom: 1px solid #e9ecef;
+    border-bottom: 1px solid var(--border-color);
 }
 
 .factor-item:last-child {
@@ -101,14 +119,14 @@ h2 {
 
 .info-note {
     font-size: 0.8rem;
-    color: #adb5bd;
+    color: var(--text-color-muted);
     margin-top: 20px;
 }
 
 /* Indikatoren Farben */
-.positive { color: #28a745; } /* Gut für Gold (Bullish) */
-.negative { color: #dc3545; } /* Schlecht für Gold (Bearish) */
-.neutral { color: #6c757d; }
+.positive { color: var(--positive-color); }
+.negative { color: var(--negative-color); }
+.neutral { color: var(--text-color-secondary); }
 
 /* Assessment Section */
 #assessment-result {
@@ -136,33 +154,34 @@ h2 {
 }
 
 .assessment-loading {
-    color: #adb5bd;
+    color: var(--text-color-muted);
 }
 
 /* Footer & Diagnose-Button */
 footer {
     text-align: center;
     font-size: 0.8rem;
-    color: #6c757d;
+    color: var(--text-color-secondary);
     margin-top: 30px;
 }
 
 #toggle-diagnostics {
     margin-top: 15px;
-    background-color: #6c757d;
+    background-color: var(--text-color-secondary);
     color: white;
     border: none;
     padding: 10px 20px;
     border-radius: 8px;
     cursor: pointer;
     font-size: 0.9rem;
+    transition: background-color 0.2s; /* HINWEIS: Weicher Übergang */
 }
 
 #toggle-diagnostics:hover {
     background-color: #495057;
 }
 
-/* NEU: Diagnosepanel (Overlay) Styles */
+/* Diagnosepanel */
 #diagnostics-panel {
     position: fixed;
     bottom: 0;
@@ -174,15 +193,15 @@ footer {
     box-shadow: 0 -5px 20px rgba(0, 0, 0, 0.5);
     font-family: monospace;
     font-size: 0.85rem;
-    max-height: 50vh; /* Maximal 50% der Bildschirmhöhe */
+    max-height: 50vh;
     overflow-y: auto;
     transition: transform 0.3s ease-in-out;
     z-index: 1000;
+    transform: translateY(0); /* HINWEIS: Standardposition ist sichtbar */
 }
 
 .diagnostics-hidden {
-    /* Verstecken durch Verschieben nach unten */
-    transform: translateY(100%);
+    transform: translateY(100%); /* HINWEIS: Versteckt durch Verschieben */
 }
 
 #diagnostics-log {
@@ -195,7 +214,6 @@ footer {
 .log-entry {
     padding: 4px 0;
     border-bottom: 1px solid #4a5568;
-    /* Wichtig für lange API-Antworten (z.B. JSON-Details) */
     word-wrap: break-word;
     white-space: pre-wrap;
 }
